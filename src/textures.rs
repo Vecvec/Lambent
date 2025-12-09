@@ -39,14 +39,14 @@ impl TextureLoader {
 
     /// Converts the texture loader to the wgpu textures
     pub fn create_textures(
-        self,
+        &self,
         device: &Device,
         queue: &Queue,
         additional_texture_usages: TextureUsages,
     ) -> WgpuTextures {
         let mut textures = Vec::with_capacity(self.images.len());
         let mut views = Vec::with_capacity(self.images.len());
-        for image in self.images {
+        for image in &self.images {
             let texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
@@ -97,9 +97,26 @@ pub enum TextureError {
 }
 
 #[non_exhaustive]
+#[derive(Clone)]
 pub struct WgpuTextures {
     pub textures: Vec<Texture>,
     pub views: Vec<TextureView>,
+}
+
+impl WgpuTextures {
+    pub fn from_textures(textures: Vec<Texture>) -> Self {
+        let views = textures.iter().map(|tex| tex.create_view(&TextureViewDescriptor::default())).collect::<Vec<_>>();
+        Self {
+            textures,
+            views,
+        }
+    }
+
+    pub fn add_texture(&mut self, tex: Texture) {
+        let view = tex.create_view(&TextureViewDescriptor::default());
+        self.textures.push(tex);
+        self.views.push(view);
+    }
 }
 
 fn create_blank_recolour(device: &Device, queue: &Queue) -> TextureView {

@@ -16,6 +16,7 @@ use std::num::NonZeroU32;
 use std::sync::mpsc;
 #[cfg(feature = "denoise")]
 use std::time::Duration;
+use std::time::Instant;
 use std::{iter, mem};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 #[cfg(no_vertex_return)]
@@ -42,7 +43,7 @@ type RayTracer = lambent::RayTracer<path_tracing::Medium>;
 
 const SIZE: u32 = 320;
 
-const SAMPLES: usize = 8;
+const SAMPLES: usize = 1;
 
 const IS_SAMPLES: usize = 4;
 
@@ -561,7 +562,7 @@ fn main() {
     );
     queue.submit(Some(encoder.finish()));
 
-    let material_buf = device.create_buffer_init(&materials.buffer_descriptor());
+    let material_buf = device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::COPY_DST));
     let material_indices_buf = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&mat_indices),
@@ -626,12 +627,14 @@ fn main() {
             },
         ],
     });
-    let camera_buffer = device.create_buffer_init(&cam.buffer_descriptor());
+    let camera_buffer = device.create_buffer_init(&cam.buffer_descriptor(BufferUsages::empty()));
 
     let mut num_frames = 0u32;
     let mut old_percent = 0u8;
+    let start = Instant::now();
 
     while !window.should_close() {
+        queue.write_buffer(&material_buf, (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64, &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes());
         let percent_done =
             (((texture_len as f32 / target_exe_num as f32) * 100.0).round() as u8).min(100);
         if old_percent < percent_done {

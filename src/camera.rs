@@ -41,11 +41,11 @@ impl Camera {
 }
 
 impl Descriptor for Camera {
-    fn buffer_descriptor(&self) -> BufferInitDescriptor<'_> {
+    fn buffer_descriptor(&self, further_usages: BufferUsages) -> BufferInitDescriptor<'_> {
         BufferInitDescriptor {
             label: Some("Camera"),
             contents: bytemuck::bytes_of(self),
-            usage: BufferUsages::UNIFORM,
+            usage: BufferUsages::UNIFORM | further_usages,
         }
     }
 }

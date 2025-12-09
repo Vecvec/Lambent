@@ -61,7 +61,9 @@ pub struct Shader {
 
 pub trait Descriptor {
     /// Creates a buffer init descriptor from the type
-    fn buffer_descriptor(&self) -> BufferInitDescriptor<'_>;
+    /// 
+    /// Returned buffer usage is for correctly binding it to the ray tracing shaders, plus `further_usages` 
+    fn buffer_descriptor(&self, further_usages: BufferUsages) -> BufferInitDescriptor<'_>;
 }
 
 impl Shader {
@@ -150,11 +152,11 @@ fn pack2xu16(int: [u16; 2]) -> u32 {
 }
 
 impl Descriptor for [Material] {
-    fn buffer_descriptor(&self) -> BufferInitDescriptor<'_> {
+    fn buffer_descriptor(&self, further_usages: BufferUsages) -> BufferInitDescriptor<'_> {
         BufferInitDescriptor {
             label: Some("Materials"),
             contents: bytemuck::cast_slice(self),
-            usage: BufferUsages::STORAGE,
+            usage: BufferUsages::STORAGE | further_usages,
         }
     }
 }
