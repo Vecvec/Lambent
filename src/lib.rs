@@ -264,14 +264,14 @@ impl<S: RayTracingShader> RayTracer<S> {
         S::features()
     }
 
+    #[deprecated = "use Limits::or_better_values_from"]
     pub fn combine_required_limits(base: wgpu::Limits) -> wgpu::Limits {
+        #[expect(deprecated)]
         S::limits_or(base)
     }
 
     pub fn required_limits() -> wgpu::Limits {
-        S::limits_or(
-            wgpu::Limits::default().using_minimum_supported_acceleration_structure_values(),
-        )
+        S::limits().or_better_values_from(&wgpu::Limits::default().using_minimum_supported_acceleration_structure_values())
     }
 
     pub fn set_intersection_handler(&mut self, handler: &dyn IntersectionHandler) {

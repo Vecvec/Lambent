@@ -101,6 +101,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
             ..Limits::default()
         }
     }
+    #[deprecated]
     fn limits_or(limit: Limits) -> Limits {
         // limits required to interact
         Limits {
@@ -132,6 +133,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
 pub unsafe trait RayTracingShaderDST {
     fn features(&self) -> Features;
     fn limits(&self) -> Limits;
+    #[deprecated]
     fn limits_or(&self, limit: Limits) -> Limits;
     fn shader_source_without_intersection_handler(&self) -> String;
     #[cfg(debug_assertions)]
@@ -150,6 +152,8 @@ unsafe impl<T: RayTracingShader> RayTracingShaderDST for T {
     fn limits(&self) -> Limits {
         T::limits()
     }
+    // this method is also depricated
+    #[expect(deprecated)]
     fn limits_or(&self, limit: Limits) -> Limits {
         T::limits_or(limit)
     }
