@@ -4,7 +4,7 @@ use wesl::Resolver;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
     BufferBindingType, BufferSize, Device, Features, Limits, PipelineLayout,
-    PipelineLayoutDescriptor, PushConstantRange, SamplerBindingType, ShaderStages,
+    PipelineLayoutDescriptor, SamplerBindingType, ShaderStages,
     StorageTextureAccess, TextureFormat, TextureSampleType, TextureViewDimension,
 };
 
@@ -84,7 +84,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
             | Features::BUFFER_BINDING_ARRAY
             | Features::STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
             | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-            | Features::PUSH_CONSTANTS
+            | Features::IMMEDIATES
             | Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
             | Features::TEXTURE_BINDING_ARRAY
             | Features::PARTIALLY_BOUND_BINDING_ARRAY
@@ -94,7 +94,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
     fn limits() -> Limits {
         // limits required to interact
         Limits {
-            max_push_constant_size: 4,
+            max_immediate_size: 4,
             max_storage_buffer_binding_size: Limits::default().max_storage_buffer_binding_size,
             // see docs for why 500,000.
             max_binding_array_elements_per_shader_stage: 500_000,
@@ -105,7 +105,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
     fn limits_or(limit: Limits) -> Limits {
         // limits required to interact
         Limits {
-            max_push_constant_size: 4.max(limit.max_push_constant_size),
+            max_immediate_size: 4.max(limit.max_immediate_size),
             max_storage_buffer_binding_size: (Limits::default().max_storage_buffer_binding_size)
                 .max(limit.max_storage_buffer_binding_size),
             max_binding_array_elements_per_shader_stage: 500_000
@@ -273,10 +273,7 @@ pub fn pipeline_layout(
     device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&mat_bgl, &out_bgl, &texture_bgl],
-        push_constant_ranges: &[PushConstantRange {
-            stages: ShaderStages::COMPUTE,
-            range: 0..4,
-        }],
+        immediate_size: 4,
     })
 }
 

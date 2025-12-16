@@ -4,7 +4,7 @@ var input: binding_array<texture_2d<f32>>;
 @group(1) @binding(0)
 var<storage, read_write> output: array<f32>;
 
-var<push_constant> num:u32;
+var<immediate> num:u32;
 
 override SIZE: u32;
 

@@ -41,6 +41,10 @@ import package::bindings::{
 @if(!vertex_return)
 import package::bindings::{ get_vertices, };
 
+enable wgpu_ray_query;
+@if(vertex_return)
+enable wgpu_ray_vertex_return;
+
 const BOUNCES = 5u;
 const VERTICES = BOUNCES + 1u;
 
@@ -305,7 +309,7 @@ fn brightness(max:f32, odds: f32) -> f32 {
     //return 4.0;
 }
 
-var<push_constant> seed_offset:u32;
+var<immediate> seed_offset:u32;
 
 override IS_SAMPLES = 64u;
 

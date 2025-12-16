@@ -4,7 +4,7 @@ use crate::low_level::out_bgl;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
     BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder,
-    ComputePipelineDescriptor, Device, Limits, PipelineLayoutDescriptor, PushConstantRange,
+    ComputePipelineDescriptor, Device, Limits, PipelineLayoutDescriptor,
     ShaderModuleDescriptor, ShaderStages,
 };
 
@@ -183,10 +183,7 @@ impl DataBuffers {
         let processing_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("(phosph_rs internal) End of frame processing pipeline layout"),
             bind_group_layouts: &[&processing_bgl],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::COMPUTE,
-                range: 0..4,
-            }],
+            immediate_size: 4,
         });
 
         let gi_reservoir_processing_pipeline =
@@ -260,7 +257,7 @@ impl DataBuffers {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &buffers.processing_bind_group, &[]);
-                pass.set_push_constants(0, &num_workgroups.to_ne_bytes());
+                pass.set_immediates(0, &num_workgroups.to_ne_bytes());
                 pass.dispatch_workgroups(execution_work_groups, 1, 1);
             }
         }

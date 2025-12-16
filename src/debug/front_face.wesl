@@ -16,6 +16,10 @@ import package::bindings::{
     near_zero,
 };
 
+enable wgpu_ray_query;
+@if(vertex_return)
+enable wgpu_ray_vertex_return;
+
 struct Ray {
     direction: vec3f,
     origin: vec3f,

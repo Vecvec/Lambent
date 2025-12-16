@@ -32,7 +32,7 @@ use wgpu::{
     ColorTargetState, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor,
     CreateBlasDescriptor, CreateTlasDescriptor, DeviceDescriptor, ExperimentalFeatures, Extent3d,
     Features, FragmentState, IndexFormat, InstanceDescriptor, Limits, Operations,
-    PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode, PushConstantRange,
+    PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
     RequestAdapterOptions, ShaderStages, SurfaceError, TextureDescriptor, TextureDimension,
     TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension,
@@ -62,6 +62,7 @@ fn main() {
 
     let mut change_seed = true;
     let mut importance_sampling = false;
+    let mut change_light_brightness = false;
 
     let mut maximum = 256;
     for arg in args {
@@ -74,6 +75,9 @@ fn main() {
         }
         if arg == "importance-sampling" {
             importance_sampling = true;
+        }
+        if arg == "change-light-brightness" {
+            change_light_brightness = true;
         }
     }
 
@@ -253,15 +257,13 @@ fn main() {
             | Features::BGRA8UNORM_STORAGE
             | SpatialResampling::features(),
         // it's recommended to only use limits you need (due to possible perf issues)
-        required_limits: RayTracer::combine_required_limits(Limits {
+        required_limits: RayTracer::required_limits().or_better_values_from(&Limits {
             max_binding_array_elements_per_shader_stage: max(
                 target_exe_num as u32,
                 Limits::default().max_binding_array_elements_per_shader_stage,
             ),
-            min_subgroup_size: adapter.limits().min_subgroup_size,
-            max_subgroup_size: adapter.limits().max_subgroup_size,
             ..Limits::default()
-        }),
+        }).using_minimum_supported_acceleration_structure_values(),
         memory_hints: wgpu::MemoryHints::default(),
         trace: Default::default(),
         experimental_features: unsafe { ExperimentalFeatures::enabled() },
@@ -392,10 +394,7 @@ fn main() {
     let averaging_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&averaging_pipeline_in_layout, &oidn_state.staging_bgl],
-        push_constant_ranges: &[PushConstantRange {
-            stages: ShaderStages::COMPUTE,
-            range: 0..4,
-        }],
+        immediate_size: 4,
     });
 
     let average_shader = device.create_shader_module(include_wgsl!("average_to_buf.wgsl"));
@@ -415,7 +414,7 @@ fn main() {
     let copy_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&oidn_state.staging_bgl],
-        push_constant_ranges: &[],
+        immediate_size: 0,
     });
 
     let copy_shader = device.create_shader_module(include_wgsl!("buf_rgb_to_tex_rgba.wgsl"));
@@ -446,7 +445,7 @@ fn main() {
             })],
         }),
         cache: None,
-        multiview: None,
+        multiview_mask: None,
     });
     let mut vertex_bytes = Vec::new();
     vertices.append_bytes(&mut vertex_bytes);
@@ -635,11 +634,13 @@ fn main() {
     let start = Instant::now();
 
     while !window.should_close() {
-        queue.write_buffer(
-            &material_buf,
-            (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64,
-            &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes(),
-        );
+        if change_light_brightness {
+            queue.write_buffer(
+                &material_buf,
+                (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64,
+                &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes(),
+            );
+        }
         let percent_done =
             (((texture_len as f32 / target_exe_num as f32) * 100.0).round() as u8).min(100);
         if old_percent < percent_done {
@@ -715,7 +716,7 @@ fn main() {
                 comp_pass.set_bind_group(1, &output_bg, &[]);
                 comp_pass.set_bind_group(2, &texture_bg, &[]);
                 // We input a different seed each frame.
-                comp_pass.set_push_constants(0, &num_frames.to_ne_bytes());
+                comp_pass.set_immediates(0, &num_frames.to_ne_bytes());
                 let size = dispatch_size(SIZE, SIZE);
                 comp_pass.dispatch_workgroups(size.width, size.height, 1);
                 comp_pass.set_pipeline(&is_compute_pipeline);
@@ -728,7 +729,7 @@ fn main() {
                 comp_pass.set_pipeline(&average_pipeline);
                 comp_pass.set_bind_group(0, &average_in, &[]);
                 comp_pass.set_bind_group(1, &oidn_state.staging_bg, &[]);
-                comp_pass.set_push_constants(0, &(texture_len as u32).to_ne_bytes());
+                comp_pass.set_immediates(0, &(texture_len as u32).to_ne_bytes());
                 // using the same dispatch size as the other shaders
                 let size = dispatch_size(SIZE, SIZE);
                 comp_pass.dispatch_workgroups(size.width, size.height, 1);
@@ -759,6 +760,7 @@ fn main() {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
                 comp_pass.set_pipeline(&copy_pipeline);
                 comp_pass.set_bind_group(0, &oidn_state.staging_bg, &[]);

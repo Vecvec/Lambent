@@ -6,7 +6,7 @@ var<storage, read_write> eof_gi_reservoirs: array<Reservoir>;
 
 override CONFIDENCE_CAP = 30u;
 
-var<push_constant> offset: u32;
+var<immediate> offset: u32;
 
 @compute
 @workgroup_size(256, 1, 1)

@@ -2,7 +2,6 @@ use wesl::{CompileOptions, Feature, FileResolver, Resolver, StandardResolver, We
 
 fn set_generic_params<R: Resolver>(compiler: &mut Wesl<R>, _validate: bool, rm_dead_code: bool) {
     compiler.set_options(CompileOptions {
-        // Ray tracing structs not implemented, also have a few functions that are specified later (this is why we have validate expresssed with an _).
         validate: false,
         // Currently, this project only partially uses wesl, so some wesl shaders don't have entry points, causing the entire module to be removed
         strip: rm_dead_code,

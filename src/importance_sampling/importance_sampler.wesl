@@ -28,6 +28,10 @@ import package::bindings::{
     // Overrides
 };
 
+enable wgpu_ray_query;
+@if(vertex_return)
+enable wgpu_ray_vertex_return;
+
 fn jacobian_determinant(q:Sample, r:Sample) -> f32 {
     let q1_to_q2 = q.sample_point - q.visible_point;
     let r1_to_q2 = r.sample_point - q.visible_point;
@@ -186,6 +190,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
     textureStore(output, id.xy, vec4<f32>((pix_is), 1.0));
 }
 
-var<push_constant> seed_offset:u32;
+var<immediate> seed_offset:u32;
 
 const U16_MAX = 0xFFFFu;

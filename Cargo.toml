@@ -8,15 +8,15 @@ description = "A ray / path tracer built on wgpu."
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-wgpu = "27"
+#wgpu = "27"
+wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "6dd69b0" }
 futures = "0.3.30"
 bytemuck = { version =  "1.22.0", features = ["derive"] }
 cgmath = "0.18"
 half = "2.4.1"
 bitflags = "2.9"
-# need trunk for rt support, so should switch to that as soon as possible
-wesl = { version = "0.2.0", features = ["naga_ext"] }
-# wesl = { git = "https://github.com/wgsl-tooling-wg/wesl-rs.git", rev = "64ae237", features = ["naga-ext"] }
+# wesl = { version = "0.3.0", features = ["naga-ext"] }
+wesl = { path = "../wesl-rs/crates/wesl", features = ["naga-ext"] }
 
 [dependencies.image]
 version = "0.25.1"
@@ -29,9 +29,8 @@ env_logger = "0.11"
 glfw = "0.59.0"
 
 [build-dependencies]
-# need trunk for rt support, so should switch to that as soon as possible
-wesl = { version = "0.2.0", features = ["naga_ext"] }
-# wesl = { git = "https://github.com/wgsl-tooling-wg/wesl-rs.git", rev = "64ae237", features = ["naga-ext"] }
+# wesl = { version = "0.3.0", features = ["naga-ext"] }
+wesl = { path = "../wesl-rs/crates/wesl", features = ["naga-ext"] }
 
 [features]
 wip-features = []

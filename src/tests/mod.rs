@@ -36,6 +36,7 @@ fn test() {
 
     log::set_max_level(LevelFilter::Trace);
     let shaders: &'static [&'static dyn RayTracingShaderDST] = &[
+        &debug::Tangent,
         // proper rt shaders
         &path_tracing::High,
         &path_tracing::Medium,
@@ -43,7 +44,6 @@ fn test() {
         // debug shaders
         &debug::FrontFace,
         &debug::Reflectance,
-        &debug::Tangent,
     ];
 
     let positions = [[1.0, 1.0], [0.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
@@ -204,7 +204,7 @@ fn exe_shader(
     let mut skipped = Vec::new();
     let instance = Instance::new(&InstanceDescriptor::default());
     let surface = instance.create_surface(window.render_context()).unwrap();
-    let adapters = instance.enumerate_adapters(Backends::default());
+    let adapters = block_on(instance.enumerate_adapters(Backends::default()));
     for adapter in &adapters {
         match run_shader(
             shader,
@@ -519,13 +519,13 @@ fn run_shader(
                 resource: BindingResource::AccelerationStructure(&tlas),
             },
             BindGroupEntry {
-                binding: 4,
+                binding: 3,
                 resource: BindingResource::BufferArray(&[
                     vertex_buffer.as_entire_buffer_binding()
                 ]),
             },
             BindGroupEntry {
-                binding: 5,
+                binding: 4,
                 resource: BindingResource::BufferArray(&[
                     index_buffer.as_entire_buffer_binding()
                 ]),
@@ -608,7 +608,7 @@ fn run_shader(
             comp_pass.set_bind_group(1, &output_bg, &[]);
             comp_pass.set_bind_group(2, &texture_bg, &[]);
             // not technically necessary, but this demos making seed random, also eye (kinda) and monitor denoises bc of the way it works
-            comp_pass.set_push_constants(0, &num_frames.to_ne_bytes());
+            comp_pass.set_immediates(0, &num_frames.to_ne_bytes());
             let size = dispatch_size(surface_config.width, surface_config.height);
             comp_pass.dispatch_workgroups(size.width, size.height, 1);
             #[cfg(feature = "wip-features")]
