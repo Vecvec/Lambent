@@ -3,7 +3,7 @@ use crate::camera::Camera;
 use crate::importance_sampling::SpatialResampling;
 use crate::low_level::RayTracingShaderDST;
 use crate::textures::TextureLoader;
-use crate::{debug, dispatch_size, path_tracing, textures, Descriptor, Material, MaterialType};
+use crate::{Descriptor, Material, MaterialType, Vertices, debug, dispatch_size, path_tracing, textures};
 use crate::{BufferType, DataBuffers};
 use cgmath::{ElementWise, Matrix4, Point3, Vector3};
 use futures::executor::block_on;
@@ -146,16 +146,16 @@ fn test() {
         ),
     ];
     let material_indices = [0, 1, 2, 3, 4, 5, 6, 7];
-    let vertices = [
-        [0.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 1.0, 1.0],
-        [1.0, 0.0, 0.0],
-        [1.0, 0.0, 1.0],
-        [1.0, 1.0, 0.0],
-        [1.0, 1.0, 1.0],
-    ];
+    let vertices = Vertices { geometry_stride: 0, vertices: vec![
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 1.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 1.0, 0.0],
+        [1.0, 1.0, 0.0, 0.0],
+        [1.0, 1.0, 1.0, 0.0],
+    ]};
     let indices = [
         0, 1, 2, 3, 2, 1, 0, 4, 1, 1, 5, 4, 0, 2, 4, 6, 4, 2, 2, 3, 6, 7, 6, 3,
     ];
@@ -192,7 +192,7 @@ fn test() {
 
 fn exe_shader(
     shader: &dyn RayTracingShaderDST,
-    vertices: &[[f32; 3]],
+    vertices: &Vertices,
     indices: &[u32],
     materials: &[Material],
     material_indices: &[u32],
@@ -261,7 +261,7 @@ fn run_shader(
     shader: &dyn RayTracingShaderDST,
     adapter: &Adapter,
     surface: &Surface,
-    vertices: &[[f32; 3]],
+    vertices: &Vertices,
     indices: &[u32],
     materials: &[Material],
     material_indices: &[u32],
@@ -269,14 +269,18 @@ fn run_shader(
     window: &mut PWindow,
     run_is: bool,
 ) -> Result<(), ExcErr> {
-    let (device, queue) = block_on(adapter.request_device(&DeviceDescriptor {
-        label: Some(adapter.get_info().name.as_str()),
-        required_features: shader.features() | Features::BGRA8UNORM_STORAGE,
-        required_limits: shader.limits(),
-        memory_hints: Default::default(),
-        trace: Default::default(),
-        experimental_features: unsafe { ExperimentalFeatures::enabled() },
-    }))
+    let (device, queue) = block_on(
+        adapter.request_device(&DeviceDescriptor {
+            label: Some(adapter.get_info().name.as_str()),
+            required_features: shader.features() | Features::BGRA8UNORM_STORAGE,
+            required_limits: shader
+                .limits()
+                .using_minimum_supported_acceleration_structure_values(),
+            memory_hints: Default::default(),
+            trace: Default::default(),
+            experimental_features: unsafe { ExperimentalFeatures::enabled() },
+        }),
+    )
     .map_err(ExcErr::Device)?;
     log::info!(
         "Found device:\n   {}, {:?}",
@@ -393,20 +397,23 @@ fn run_shader(
         cache: None,
     });
 
+    let mut bytes = Vec::new();
+    vertices.append_bytes(&mut bytes);
+
     let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
-        contents: bytemuck::cast_slice(vertices),
-        usage: BufferUsages::BLAS_INPUT,
+        contents: &bytes,
+        usage: BufferUsages::BLAS_INPUT | BufferUsages::STORAGE,
     });
     let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(indices),
-        usage: BufferUsages::BLAS_INPUT,
+        usage: BufferUsages::BLAS_INPUT | BufferUsages::STORAGE,
     });
 
     let blas_size = BlasTriangleGeometrySizeDescriptor {
         vertex_format: VertexFormat::Float32x3,
-        vertex_count: vertices.len() as u32,
+        vertex_count: vertices.vertices.len() as u32,
         index_format: Some(IndexFormat::Uint32),
         index_count: Some(indices.len() as u32),
         flags: AccelerationStructureGeometryFlags::OPAQUE,
@@ -414,15 +421,13 @@ fn run_shader(
     let mut tlas = device.create_tlas(&CreateTlasDescriptor {
         label: None,
         max_instances: 1,
-        flags: AccelerationStructureFlags::PREFER_FAST_TRACE
-            | AccelerationStructureFlags::ALLOW_RAY_HIT_VERTEX_RETURN,
+        flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
         update_mode: AccelerationStructureUpdateMode::Build,
     });
     let blas = device.create_blas(
         &CreateBlasDescriptor {
             label: Some("test blas"),
-            flags: AccelerationStructureFlags::PREFER_FAST_TRACE
-                | AccelerationStructureFlags::ALLOW_RAY_HIT_VERTEX_RETURN,
+            flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
             update_mode: AccelerationStructureUpdateMode::Build,
         },
         BlasGeometrySizeDescriptors::Triangles {
@@ -475,8 +480,8 @@ fn run_shader(
             geometry: BlasGeometries::TriangleGeometries(vec![BlasTriangleGeometry {
                 size: &blas_size,
                 vertex_buffer: &vertex_buffer,
-                first_vertex: 0,
-                vertex_stride: mem::size_of::<[f32; 3]>() as BufferAddress,
+                first_vertex: 1,
+                vertex_stride: mem::size_of::<[f32; 4]>() as BufferAddress,
                 index_buffer: Some(&index_buffer),
                 first_index: Some(0),
                 transform_buffer: None,
@@ -487,7 +492,8 @@ fn run_shader(
     );
     queue.submit(Some(encoder.finish()));
 
-    let material_buf = device.create_buffer_init(&materials.buffer_descriptor());
+    let material_buf =
+        device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::empty()));
     let material_indices_buf = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(material_indices),
@@ -512,6 +518,18 @@ fn run_shader(
                 binding: 2,
                 resource: BindingResource::AccelerationStructure(&tlas),
             },
+            BindGroupEntry {
+                binding: 4,
+                resource: BindingResource::BufferArray(&[
+                    vertex_buffer.as_entire_buffer_binding()
+                ]),
+            },
+            BindGroupEntry {
+                binding: 5,
+                resource: BindingResource::BufferArray(&[
+                    index_buffer.as_entire_buffer_binding()
+                ]),
+            },
         ],
     });
 
@@ -532,7 +550,8 @@ fn run_shader(
         let view = Matrix4::look_at_rh(eye, centre, Vector3::unit_y());
         let _ = cam.update_from_proj_view(None, Some(view.into()));
 
-        let camera_buffer = device.create_buffer_init(&cam.buffer_descriptor());
+        let camera_buffer =
+            device.create_buffer_init(&cam.buffer_descriptor(BufferUsages::empty()));
         glfw.poll_events();
         let surface_texture = match surface.get_current_texture() {
             Ok(tex) => tex,

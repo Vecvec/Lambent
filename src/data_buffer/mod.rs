@@ -2,7 +2,10 @@ use std::borrow::Cow;
 
 use crate::low_level::out_bgl;
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, ComputePipelineDescriptor, Device, Limits, PipelineLayoutDescriptor, PushConstantRange, ShaderModuleDescriptor, ShaderStages
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder,
+    ComputePipelineDescriptor, Device, Limits, PipelineLayoutDescriptor, PushConstantRange,
+    ShaderModuleDescriptor, ShaderStages,
 };
 
 pub mod internal {
@@ -268,7 +271,10 @@ impl DataBuffers {
                 self,
                 encoder,
                 &self.gi_reservoir_processing_pipeline,
-                ((self.spatial_resampling.current.size() / size_of::<crate::importance_sampling::Reservoir>() as u64) as u32).div_ceil(256),
+                ((self.spatial_resampling.current.size()
+                    / size_of::<crate::importance_sampling::Reservoir>() as u64)
+                    as u32)
+                    .div_ceil(256),
             );
             self.spatial_resampling.advance_frame(encoder);
         } else {
@@ -287,7 +293,9 @@ impl DataBuffers {
                 self,
                 encoder,
                 &self.world_markov_chain_processing_pipeline,
-                ((self.markov_chain_world_space.current.size() / size_of::<WorldMarkovStorage>() as u64) as u32).div_ceil(256),
+                ((self.markov_chain_world_space.current.size()
+                    / size_of::<WorldMarkovStorage>() as u64) as u32)
+                    .div_ceil(256),
             );
             encoder.copy_buffer_to_buffer(
                 &self.markov_chain_world_space.current,

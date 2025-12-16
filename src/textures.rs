@@ -105,11 +105,11 @@ pub struct WgpuTextures {
 
 impl WgpuTextures {
     pub fn from_textures(textures: Vec<Texture>) -> Self {
-        let views = textures.iter().map(|tex| tex.create_view(&TextureViewDescriptor::default())).collect::<Vec<_>>();
-        Self {
-            textures,
-            views,
-        }
+        let views = textures
+            .iter()
+            .map(|tex| tex.create_view(&TextureViewDescriptor::default()))
+            .collect::<Vec<_>>();
+        Self { textures, views }
     }
 
     pub fn add_texture(&mut self, tex: Texture) {
@@ -157,6 +157,38 @@ pub fn bind_group_from_textures(
     recolour_tex: Option<TextureView>,
     sampler: Option<&Sampler>,
 ) -> (BindGroup, BindGroupLayout) {
+    let bgl = texture_bgl(
+        device,
+        [
+            NonZeroU32::new(diffuse_tex.textures.len() as u32).unwrap(),
+            NonZeroU32::new(emission_tex.textures.len() as u32).unwrap(),
+            NonZeroU32::new(attribute_tex.textures.len() as u32).unwrap(),
+        ],
+    );
+
+    let bg = bind_group_from_textures_bindgroup_layout(
+        device,
+        queue,
+        diffuse_tex,
+        emission_tex,
+        attribute_tex,
+        recolour_tex,
+        sampler,
+        &bgl,
+    );
+    (bg, bgl)
+}
+
+pub fn bind_group_from_textures_bindgroup_layout(
+    device: &Device,
+    queue: &Queue,
+    diffuse_tex: &WgpuTextures,
+    emission_tex: &WgpuTextures,
+    attribute_tex: &WgpuTextures,
+    recolour_tex: Option<TextureView>,
+    sampler: Option<&Sampler>,
+    layout: &BindGroupLayout,
+) -> BindGroup {
     let sampler_storage;
     let sampler = match sampler {
         None => {
@@ -167,14 +199,6 @@ pub fn bind_group_from_textures(
         Some(sampler) => sampler,
     };
 
-    let bgl = texture_bgl(
-        device,
-        [
-            NonZeroU32::new(diffuse_tex.textures.len() as u32).unwrap(),
-            NonZeroU32::new(emission_tex.textures.len() as u32).unwrap(),
-            NonZeroU32::new(attribute_tex.textures.len() as u32).unwrap(),
-        ],
-    );
     let recolour_tex = recolour_tex.unwrap_or_else(|| create_blank_recolour(device, queue));
     let mut diffuse_views = Vec::with_capacity(diffuse_tex.views.len());
     for view in diffuse_tex.views.iter() {
@@ -190,7 +214,7 @@ pub fn bind_group_from_textures(
     }
     let bg = device.create_bind_group(&BindGroupDescriptor {
         label: None,
-        layout: &bgl,
+        layout: layout,
         entries: &[
             BindGroupEntry {
                 binding: 0,
@@ -214,5 +238,5 @@ pub fn bind_group_from_textures(
             },
         ],
     });
-    (bg, bgl)
+    bg
 }

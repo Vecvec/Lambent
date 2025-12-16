@@ -216,7 +216,7 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(44).unwrap()),
+                min_binding_size: Some(BufferSize::new(32).unwrap()),
             },
             count: None,
         },
