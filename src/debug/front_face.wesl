@@ -1,9 +1,19 @@
 import package::bindings::{
+    // aliases
+    ray_query_maybe_vertex_return,
+    // bindings
     output,
     output_normal,
     output_albedo,
     camera,
     acc_struct,
+    materials,
+    material_idx,
+    tex_diffuse,
+    sam,
+    // functions
+    unpack_2xu16,
+    near_zero,
 };
 
 struct Ray {
@@ -13,7 +23,7 @@ struct Ray {
 
 var<push_constant> seed_offset:u32;
 
-@workgroup_size(8, 8, 1)
+@workgroup_size(64, 1, 1)
 @compute
 fn rt_main(@builtin(global_invocation_id) id: vec3<u32>) {
     let ray_sample = rt_sample(id.xy);
@@ -50,7 +60,7 @@ override T_MIN:f32 = 0.001;
 override T_MAX:f32 = 1000.0;
 
 fn ray_hit(ray: Ray) -> Hit {
-    var rq: ray_query<vertex_return>;
+    var rq: ray_query_maybe_vertex_return;
     rayQueryInitialize(&rq, acc_struct, RayDesc(0u, 0xFFu, T_MIN, T_MAX, ray.origin, ray.direction));
     var aabb_normal: vec3<f32>;
     var aabb_tangent: vec3<f32>;

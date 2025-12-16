@@ -1,4 +1,4 @@
-import package::bindings::{ Reservoir, CompressedInfo, MarcovChainState, };
+import package::bindings::{ Reservoir, CompressedInfo, MarcovChainState, near_zero };
 
 const PI = 3.14159265358979323846264338327950288419716939937510;
 const HALF_PI = PI / 2.0;
@@ -8,12 +8,6 @@ const DIFFUSE = 0u;
 const METALLIC = 1u;
 const TRANSPARENT = 2u;
 const SKY = 0xFFu;
-
-const SMALL_VAL:f32 = 0.0001;
-
-fn near_zero(float:f32) -> bool {
-    return (float < SMALL_VAL) && (float > -SMALL_VAL);
-}
 
 fn len_sqrd(v:vec3<f32>) -> f32 {
     return fma(v.x, v.x, fma(v.y, v.y, (v.z * v.z)));

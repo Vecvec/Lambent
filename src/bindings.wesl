@@ -168,3 +168,9 @@ struct Reservoir {
     packed_confidance_valid: u32,    // 60 4 4
     W: f32,                     // 64 4 4
 }
+
+const SMALL_VAL:f32 = 0.0001;
+
+fn near_zero(float:f32) -> bool {
+    return (float < SMALL_VAL) && (float > -SMALL_VAL);
+}

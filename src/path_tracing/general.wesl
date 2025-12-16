@@ -28,6 +28,7 @@ import package::bindings::{
     info,
     // functions
     unpack_2xu16,
+    near_zero,
     // constants
     INVALID_KEY,
     STATE_LOCKED,
@@ -845,12 +846,24 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
         } else {
             let bg_color = background(&ray);
             // if it's our first hit it doesn't matter, but we should resample the sky sometimes
+            let new_pos = at(&ray, T_MAX);
             if (i == 1u) {
-                sample.visible_point = at(&ray, T_MAX);
+                sample.visible_point = new_pos;
                 sample.visible_normal = -ray.direction;
             }
             if (!(i == 0u)) {
                 sample.out_radiance = fma(out_radiance_colour, bg_color, sample.out_radiance);
+
+                // update markov chains
+                let radiance_out = (bg_color * cached_brdf / cached_pdf);
+                grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out);
+                let weight = length(radiance_out);
+                if weight > 0.0 {
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 0.25);
+                    grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out) * select(0.5, 1.0, i == 1), self_seed, last_not_vmf, tentative_marcov_chain_state, 1.0);
+                    self_seed++;
+                }
             }
             sample.color = fma(color, bg_color, sample.color);
             break;
