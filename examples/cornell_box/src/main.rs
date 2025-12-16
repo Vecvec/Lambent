@@ -562,7 +562,8 @@ fn main() {
     );
     queue.submit(Some(encoder.finish()));
 
-    let material_buf = device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::COPY_DST));
+    let material_buf =
+        device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::COPY_DST));
     let material_indices_buf = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&mat_indices),
@@ -634,7 +635,11 @@ fn main() {
     let start = Instant::now();
 
     while !window.should_close() {
-        queue.write_buffer(&material_buf, (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64, &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes());
+        queue.write_buffer(
+            &material_buf,
+            (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64,
+            &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes(),
+        );
         let percent_done =
             (((texture_len as f32 / target_exe_num as f32) * 100.0).round() as u8).min(100);
         if old_percent < percent_done {

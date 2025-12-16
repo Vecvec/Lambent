@@ -61,8 +61,8 @@ pub struct Shader {
 
 pub trait Descriptor {
     /// Creates a buffer init descriptor from the type
-    /// 
-    /// Returned buffer usage is for correctly binding it to the ray tracing shaders, plus `further_usages` 
+    ///
+    /// Returned buffer usage is for correctly binding it to the ray tracing shaders, plus `further_usages`
     fn buffer_descriptor(&self, further_usages: BufferUsages) -> BufferInitDescriptor<'_>;
 }
 
@@ -192,6 +192,7 @@ pub struct DynamicRayTracer {
     intersection_handler: String,
     shader: Box<dyn RayTracingShaderDST>,
     extra_bgls: Vec<BindGroupLayout>,
+    resolver: Option<RcResolver>,
 }
 
 impl DynamicRayTracer {
@@ -216,13 +217,16 @@ impl DynamicRayTracer {
             attribute_count,
             &self.extra_bgls,
         );
+
+        let compiled = compile_shader(
+            self.shader.shader_source_without_intersection_handler(),
+            &self.intersection_handler,
+            &self.resolver,
+        );
+
         let shader = self.device.create_shader_module(ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(Cow::Owned(
-                self.shader
-                    .shader_source_without_intersection_handler()
-                    .add(&self.intersection_handler),
-            )),
+            source: ShaderSource::Wgsl(Cow::Owned(compiled)),
         });
         self.device
             .create_compute_pipeline(&ComputePipelineDescriptor {
@@ -271,7 +275,9 @@ impl<S: RayTracingShader> RayTracer<S> {
     }
 
     pub fn required_limits() -> wgpu::Limits {
-        S::limits().or_better_values_from(&wgpu::Limits::default().using_minimum_supported_acceleration_structure_values())
+        S::limits().or_better_values_from(
+            &wgpu::Limits::default().using_minimum_supported_acceleration_structure_values(),
+        )
     }
 
     pub fn set_intersection_handler(&mut self, handler: &dyn IntersectionHandler) {
@@ -297,50 +303,11 @@ impl<S: RayTracingShader> RayTracer<S> {
             &self.extra_bgls,
         );
 
-        // Compile the partial module with the intersection handler.
-        let mut compiler = Wesl::new_barebones();
-        compiler.set_options(CompileOptions {
-            validate: false,
-            ..Default::default()
-        });
-
-        let path_tracer_module = "import package::intersection_handler::intersect;\n\n"
-            .to_string()
-            .add(&S::shader_source_without_intersection_handler());
-
-        let mut resolver = VirtualResolver::new();
-        resolver.add_module(
-            "package::path_tracer".parse().unwrap(),
-            std::borrow::Cow::Owned(path_tracer_module),
+        let compiled = compile_shader(
+            S::shader_source_without_intersection_handler(),
+            &self.intersection_handler,
+            &self.resolver,
         );
-
-        resolver.add_module(
-            "package::intersection_handler".parse().unwrap(),
-            std::borrow::Cow::Owned(self.intersection_handler.clone()),
-        );
-
-        resolver.add_module(
-            "package::intersection".parse().unwrap(),
-            std::borrow::Cow::Borrowed(include_str!("intersection.wesl")),
-        );
-
-        let mut router = Router::new();
-        if let Some(resolver) = self.resolver.clone() {
-            router.mount_fallback_resolver(resolver);
-        }
-        router.mount_resolver("package".parse().unwrap(), resolver);
-        let mut compiler = Wesl::new_barebones().set_custom_resolver(router);
-
-        compiler.set_options(CompileOptions {
-            validate: false,
-            ..Default::default()
-        });
-
-        let compiled = compiler
-            .compile(&"package::path_tracer".parse().unwrap())
-            .inspect_err(|e| panic!("{e}"))
-            .unwrap()
-            .to_string();
 
         let shader = self.device.create_shader_module(ShaderModuleDescriptor {
             label: get_label::<S>(),
@@ -367,8 +334,60 @@ impl<S: RayTracingShader> RayTracer<S> {
             intersection_handler: self.intersection_handler,
             shader: Box::new(S::new()),
             extra_bgls: self.extra_bgls,
+            resolver: self.resolver,
         }
     }
+}
+
+fn compile_shader(
+    module: String,
+    intersection_handler: &str,
+    other_resolver: &Option<RcResolver>,
+) -> String {
+    // Compile the partial module with the intersection handler.
+    let mut compiler = Wesl::new_barebones();
+    compiler.set_options(CompileOptions {
+        validate: false,
+        ..Default::default()
+    });
+
+    let path_tracer_module = "import package::intersection_handler::intersect;\n\n"
+        .to_string()
+        .add(&module);
+
+    let mut resolver = VirtualResolver::new();
+    resolver.add_module(
+        "package::path_tracer".parse().unwrap(),
+        std::borrow::Cow::Owned(path_tracer_module),
+    );
+
+    resolver.add_module(
+        "package::intersection_handler".parse().unwrap(),
+        std::borrow::Cow::Owned(intersection_handler.to_string()),
+    );
+
+    resolver.add_module(
+        "package::intersection".parse().unwrap(),
+        std::borrow::Cow::Borrowed(include_str!("intersection.wesl")),
+    );
+
+    let mut router = Router::new();
+    if let Some(resolver) = other_resolver.clone() {
+        router.mount_fallback_resolver(resolver);
+    }
+    router.mount_resolver("package".parse().unwrap(), resolver);
+    let mut compiler = Wesl::new_barebones().set_custom_resolver(router);
+
+    compiler.set_options(CompileOptions {
+        validate: false,
+        ..Default::default()
+    });
+
+    compiler
+        .compile(&"package::path_tracer".parse().unwrap())
+        .inspect_err(|e| panic!("{e}"))
+        .unwrap()
+        .to_string()
 }
 
 #[cfg(debug_assertions)]
