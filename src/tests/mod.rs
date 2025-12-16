@@ -36,7 +36,6 @@ fn test() {
 
     log::set_max_level(LevelFilter::Trace);
     let shaders: &'static [&'static dyn RayTracingShaderDST] = &[
-        &debug::Tangent,
         // proper rt shaders
         &path_tracing::High,
         &path_tracing::Medium,
@@ -44,6 +43,7 @@ fn test() {
         // debug shaders
         &debug::FrontFace,
         &debug::Reflectance,
+        &debug::Tangent,
     ];
 
     let positions = [[1.0, 1.0], [0.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
