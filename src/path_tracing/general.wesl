@@ -1,5 +1,5 @@
 import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx };
-import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, };
+import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -176,11 +176,19 @@ fn secondary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u
 }
 
 const GRID_SIZE: f32 = 0.1;
+const SIZE_PER_GRID_CHANGE = 1.0;
+fn grid_loc(pos: vec3<f32>) -> vec3<i32> {
+    // Do we *need* to do a proper distance calculation? or would adding .x, .y and .z together suffice instead?
+    let len = distance(pos, camera_loc);
+    let num_shifts = u32(log2(max(len / SIZE_PER_GRID_CHANGE, 1.0)));
+    let mask: u32 = (U32_MAX << min(num_shifts, 30));
+    return vec3<i32>(pos / GRID_SIZE) & vec3(bitcast<i32>(mask));
+}
 
 const CACHE_TIMEOUT = 30u;
 
 fn grid_load(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, force_old: bool) -> MarcovChainState {
-    let grid_pos = vec3<i32>(pos / GRID_SIZE);
+    let grid_pos = grid_loc(pos);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     var s: MarcovChainState;
@@ -216,7 +224,7 @@ fn grid_load(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, force_old: 
 }
 
 fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, state: MarcovChainState) {
-    let grid_pos = vec3<i32>(pos / GRID_SIZE);
+    let grid_pos = grid_loc(pos);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
@@ -236,7 +244,7 @@ fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32
 }
 
 fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) -> vec3<f32> {
-    let grid_pos = vec3<i32>(pos / GRID_SIZE);
+    let grid_pos = grid_loc(pos);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     var num_samples = atomicLoad(&world_markov_chains[idx].num_samples);
@@ -261,7 +269,7 @@ fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3
 }
 
 fn grid_add_radiance(pos:vec3<f32>, normal:vec3<f32>, incoming: vec3<f32>, radiance: vec3<f32>) {
-    let grid_pos = vec3<i32>(pos / GRID_SIZE);
+    let grid_pos = grid_loc(pos);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
@@ -468,7 +476,7 @@ fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat:
             return state;
         }
         state.num_samples = min(state.num_samples + 1, MARCOV_CHAIN_SAMPLE_CLAMP);
-        let alpha = max(1.0 / f32(state.num_samples), 0.01) * confidence;
+        let alpha = select(max(1.0 / f32(state.num_samples), 0.01) * confidence, 1.0, state.num_samples == 1);
         state.weight_sum = mix(state.weight_sum, score, alpha);
         state.light_source = mix(state.light_source, score * x2, alpha);
         let mean = normalize(get_light_dir(state, x1));
@@ -484,6 +492,8 @@ fn get_light_dir(state: MarcovChainState, current: vec3<f32>) -> vec3<f32> {
     return safe_div_vec3(state.light_source, state.weight_sum) - current;
     //return state.light_source - current;
 }
+
+var<private> camera_loc: vec3<f32>;
 
 @workgroup_size(64, 1, 1)
 @compute
@@ -505,7 +515,6 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
     var pixel_roughness: f32;
     var is_samples = 0u;
     var out_radiance = vec3<f32>();
-    var cam_loc: vec3<f32>;
     var sample: Sample;
     var sample_valid = false;
     var pdf = 0.0;
@@ -513,7 +522,6 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
     for (var i = 0u; i < SAMPLES; i++) {
         fill_mc_screen_space_states(&own_seed, sub_size, id.xy, screen_size);
         let ray_sample = rt_sample(id.xy, own_seed, (i == 0u));
-        cam_loc = ray_sample.cam_loc;
         pixel_normal = ray_sample.normal;
         pixel_albedo = ray_sample.albedo;
         pixel_emission = ray_sample.emission;
@@ -550,7 +558,7 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
         R.W = safe_div(R.w, (f32(confidance) * p_hat(sam_from_res(R))));
         gi_reservoirs[idx] = R;
     }
-    info[idx] = from_info(Info(cam_loc, pixel_emission, pixel_albedo));
+    info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
     //lights.samples[idx].out_radiance = out_radiance / f32(SAMPLES);
     //lights.samples[idx].W = lights.samples[idx].w / max(0.00001, (f32(unpack4xU8(lights.samples[idx].M_valid).x) * p_hat(sam_from_res(lights.samples[idx]), pixel_normal, lights.samples[idx].sample_point, pixel_albedo, -normalize(lights.samples[idx].sample_point - cam_loc))));
     markov_chains[idx] = tentative_marcov_chain_state;
@@ -571,7 +579,6 @@ struct SampleReturn {
     out_radiance: vec3<f32>,
     ty:u32,
     roughness: f32,
-    cam_loc: vec3<f32>,
     valid: bool,
     pdf:f32,
 }
@@ -600,7 +607,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     var out_radiance_colour: vec3<f32> = vec3<f32>(1.0);
     var sample: SampleReturn = SampleReturn();
     sample.ty = SKY;
-    sample.cam_loc = ray.origin;
+    camera_loc = ray.origin;
     sample.pdf = 1.0;
     var previously_diffuse = false;
     var previous_brightness = 0.0;
@@ -628,9 +635,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out + radiance_reflected);
                 let weight = length(radiance_out + (radiance_reflected));
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 0.25);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0);
                     grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out) * select(0.5, 1.0, i == 1), self_seed, last_not_vmf, tentative_marcov_chain_state, 1.0);
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1));
                     self_seed++;
                 }
             }
@@ -863,9 +870,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out);
                 let weight = length(radiance_out);
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 0.25);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0);
                     grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out) * select(0.5, 1.0, i == 1), self_seed, last_not_vmf, tentative_marcov_chain_state, 1.0);
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1));
                     self_seed++;
                 }
             }

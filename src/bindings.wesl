@@ -22,7 +22,7 @@ struct AtomicMarcovChainState {
 //
 // Note: at this point, f32 will be off by up to 8 when casting, due to a step size of 16. The
 // error is about 0.000006%. This is probably unnoticable.
-const MAX_NUM_SAMPLES: u32 = 0xFFFFFFF;
+const MAX_NUM_SAMPLES: u32 = 0xFfFfFfF;
 //const MAX_NUM_SAMPLES: u32 = 2;
 
 const STATE_LOCKED: u32 = 1;
