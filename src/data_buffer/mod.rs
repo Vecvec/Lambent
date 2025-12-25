@@ -247,6 +247,9 @@ impl DataBuffers {
             pipeline: &wgpu::ComputePipeline,
             mut num_workgroups: u32,
         ) {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &buffers.processing_bind_group, &[]);
             while num_workgroups != 0 {
                 let execution_work_groups = buffers
                     .limits
@@ -254,9 +257,6 @@ impl DataBuffers {
                     .min(num_workgroups.try_into().unwrap_or(<u32>::MAX));
                 num_workgroups -= execution_work_groups;
 
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(pipeline);
-                pass.set_bind_group(0, &buffers.processing_bind_group, &[]);
                 pass.set_immediates(0, &num_workgroups.to_ne_bytes());
                 pass.dispatch_workgroups(execution_work_groups, 1, 1);
             }
