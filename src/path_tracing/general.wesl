@@ -178,8 +178,8 @@ fn secondary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u
 const GRID_SIZE: f32 = 0.1;
 const SIZE_PER_GRID_CHANGE = 1.0;
 fn grid_loc(pos: vec3<f32>) -> vec3<i32> {
-    // Do we *need* to do a proper distance calculation? or would adding .x, .y and .z together suffice instead?
-    let len = distance(pos, camera_loc);
+    let diff = abs(pos - camera_loc);
+    let len = max(diff.x, max(diff.y, diff.z));
     let num_shifts = u32(log2(max(len / SIZE_PER_GRID_CHANGE, 1.0)));
     let mask: u32 = (U32_MAX << min(num_shifts, 30));
     return vec3<i32>(pos / GRID_SIZE) & vec3(bitcast<i32>(mask));
