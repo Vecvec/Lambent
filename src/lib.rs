@@ -24,7 +24,7 @@ pub mod textures;
 
 use crate::low_level::rc_resolver::RcResolver;
 use crate::low_level::{IntersectionHandler, RayTracingShader, RayTracingShaderDST};
-pub use data_buffer::{BufferType, DataBuffers};
+pub use data_buffer::{BufferType, DataBuffers, AdvanceOptions};
 
 /// Refractive indices from https://refractiveindex.info/
 pub mod refractive_indices {
@@ -162,6 +162,7 @@ impl Descriptor for [Material] {
 }
 
 #[repr(u8)]
+#[derive(Clone, Copy, Debug)]
 pub enum MaterialType {
     /// A material the randomly bounces in a hemisphere
     Diffuse = 0,

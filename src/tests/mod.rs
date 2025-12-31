@@ -3,7 +3,7 @@ use crate::camera::Camera;
 use crate::importance_sampling::SpatialResampling;
 use crate::low_level::RayTracingShaderDST;
 use crate::textures::TextureLoader;
-use crate::{Descriptor, Material, MaterialType, Vertices, debug, dispatch_size, path_tracing, textures};
+use crate::{AdvanceOptions, Descriptor, Material, MaterialType, Vertices, debug, dispatch_size, path_tracing, textures};
 use crate::{BufferType, DataBuffers};
 use cgmath::{ElementWise, Matrix4, Point3, Vector3};
 use futures::executor::block_on;
@@ -355,7 +355,7 @@ fn run_shader(
         None,
         None,
     );
-    let samples: u32 = if run_is { 1 } else { 8 };
+    let samples: u32 = if run_is { 1 } else { 4 };
 
     #[cfg(feature = "wip-features")]
     let layout = crate::low_level::pipeline_layout(
@@ -618,7 +618,7 @@ fn run_shader(
             }
         }
 
-        buffers.advance_frame(&mut encoder, BufferType::all());
+        buffers.advance_frame(&mut encoder, BufferType::all(), AdvanceOptions::RESPONSIVE);
 
         let blit = wgpu::util::TextureBlitter::new(&device, surface_config.format);
 

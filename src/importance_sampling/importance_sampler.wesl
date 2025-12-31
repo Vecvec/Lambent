@@ -68,6 +68,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
     var Rs_normal = u32_to_normalised(Rs.sample_normal);
     var Q = array<Reservoir, 129>();
     Q[0] = Rs;
+    if (Rs.ty == SKY) {
+        return;
+    }
     var i: u32;
     let input_M = unpack_confidance(Rs.packed_confidance_valid).confidance;
     var selected = 0u;

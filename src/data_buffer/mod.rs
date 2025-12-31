@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, num::NonZeroU16};
 
 use crate::low_level::out_bgl;
 use wgpu::{
@@ -183,7 +183,7 @@ impl DataBuffers {
         let processing_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("(phosph_rs internal) End of frame processing pipeline layout"),
             bind_group_layouts: &[&processing_bgl],
-            immediate_size: 4,
+            immediate_size: 8,
         });
 
         let gi_reservoir_processing_pipeline =
@@ -240,12 +240,14 @@ impl DataBuffers {
         &self,
         encoder: &mut CommandEncoder,
         buffers_to_temporally_advance: BufferType,
+        options: AdvanceOptions,
     ) {
         fn run_process_pipeline(
             buffers: &DataBuffers,
             encoder: &mut CommandEncoder,
             pipeline: &wgpu::ComputePipeline,
             mut num_workgroups: u32,
+            options: AdvanceOptions,
         ) {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(pipeline);
@@ -258,6 +260,7 @@ impl DataBuffers {
                 num_workgroups -= execution_work_groups;
 
                 pass.set_immediates(0, &num_workgroups.to_ne_bytes());
+                pass.set_immediates(size_of::<u32>() as _, &(options.confidence_cap.get() as u32).to_ne_bytes());
                 pass.dispatch_workgroups(execution_work_groups, 1, 1);
             }
         }
@@ -272,6 +275,7 @@ impl DataBuffers {
                     / size_of::<crate::importance_sampling::Reservoir>() as u64)
                     as u32)
                     .div_ceil(256),
+                options,
             );
             self.spatial_resampling.advance_frame(encoder);
         } else {
@@ -293,6 +297,7 @@ impl DataBuffers {
                 ((self.markov_chain_world_space.current.size()
                     / size_of::<WorldMarkovStorage>() as u64) as u32)
                     .div_ceil(256),
+                options,
             );
             encoder.copy_buffer_to_buffer(
                 &self.markov_chain_world_space.current,
@@ -390,4 +395,36 @@ impl DataBuffers {
             ],
         })
     }
+}
+
+#[derive(Clone, Copy)]
+pub struct AdvanceOptions {
+    /// What to clamp the confidence of a ReSTIR
+    /// reservoir to, lower is more interactive,
+    /// higher typically means better quality.
+    /// 
+    /// Note: if you want to increase responsiveness
+    /// without lowering quality, consider validating
+    /// part or all of the reservoirs each frame.
+    pub confidence_cap: NonZeroU16,
+}
+
+impl AdvanceOptions {
+    /// Usable for changing scenes. Adapts rapidly,
+    /// usually within a few frames.
+    pub const RESPONSIVE: Self = AdvanceOptions {
+        confidence_cap: NonZeroU16::new(2).unwrap(),
+    };
+
+    /// Useful for scenes with little to no changes,
+    /// usually takes about 100 frames to adapt.
+    pub const SEMI_INTERACTIVE: Self = AdvanceOptions {
+        confidence_cap: NonZeroU16::new(30).unwrap(),
+    };
+
+    /// Shouldn't be used unless you know what you're
+    /// doing. *Very* slow to adapt to lighting changes.
+    pub const SLOW: Self = AdvanceOptions {
+        confidence_cap: NonZeroU16::new(100).unwrap(),
+    };
 }

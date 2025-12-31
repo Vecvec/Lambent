@@ -1,5 +1,5 @@
 import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx };
-import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
+import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -37,6 +37,7 @@ import package::bindings::{
     // Overrides
     SAMPLES,
 };
+import package::path_tracing::weighted_reservoir_sampling;
 
 @if(!vertex_return)
 import package::bindings::{ get_vertices, };
@@ -386,8 +387,9 @@ const JITTER_SIZE = GRID_SIZE * 1.5;
 //const JITTER_SIZE = 0.0;
 fn fill_mc_world_space_states(own_seed: ptr<function, u32>, pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) {
     for (var i = 0; i < NUM_RESAMPLES_WORLD_SPACE; i++) {
-        let rand_candidate = rand_f32(*own_seed) < 0.7;
-        let jitter_mul = select(1.0, 0.75, rand_candidate);
+        let force_self = i == 0;
+        let rand_candidate = rand_f32(*own_seed) < 0.7 && !force_self;
+        let jitter_mul = select(select(1.0, 0.75, rand_candidate), 0.0, force_self);
         let jitter = rand_xz_vec3_f32(own_seed)*JITTER_SIZE*jitter_mul;
         let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, rand_candidate);
         other_pixels_marcov_chain_states.state[(NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME) + i] = s;
@@ -417,6 +419,7 @@ fn resample_mcmm(own_seed: ptr<function, u32>, origin: vec3<f32>, normal: vec3<f
         *own_seed = rand_u32(*own_seed);
     }
     other_pixels_marcov_chain_states.sum_weight_sum = sum_mc;
+    //s = MarcovChainState();
     return s;
 }
 
@@ -550,12 +553,19 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
         var R: Reservoir;
         let resam_R = old_gi_reservoirs[idx];
         R = resam_R;
+        if dot(u32_to_normalised(R.sample_normal), pixel_normal) < 0.95 {
+            R = Reservoir();
+        }
         //R.pdf = saturate(sample.pdf);
         let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
         R = update(sample, w, R, own_seed, false);
         own_seed = rand_u32(own_seed);
         let confidance = unpack_confidance(R.packed_confidance_valid).confidance;
         R.W = safe_div(R.w, (f32(confidance) * p_hat(sam_from_res(R))));
+        gi_reservoirs[idx] = R;
+    } else if sample.ty == SKY {
+        var R = Reservoir();
+        R.ty = SKY;
         gi_reservoirs[idx] = R;
     }
     info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
@@ -622,6 +632,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     var last_not_vmf = false;
     var vmf_weight = 1.0;
     let start_dir = ray.direction;
+    var first_dir: vec3<f32>;
     var last_dir: vec3<f32>;
     var last_diffuse = false;
     for (var i = 0u; i < BOUNCES; i++) {
@@ -740,6 +751,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                         ray.direction = direction;
                     }*/
                     var dir: vec3<f32>;
+                    // var wrs = weighted_reservoir_sampling::WRS_vec4f();
                     // Prepare for markov chain
                     //s.light_source = vec3<f32>(0.0, 1.0, 0.0);
                     let light_dir = get_light_dir(s, ray.origin);
@@ -747,6 +759,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                     let kappa = get_kappa(s);
                     // Calculate cosine direction
                     let dir_cosine = cosine_weighted_hemisphere(self_seed, intersection.normal, intersection.tangent);
+                    let cosine_pdf = max(dot(dir_cosine, intersection.normal) / PI, 0.0);
+                    // let cosine_weight = 0.2;
+                    // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_cosine, cosine_pdf), cosine_weight, &self_seed);
                     // Calculate markov chain direction
                     let theta = rand_f32(self_seed) * TAU;
                     let V = vec2<f32>(cos(theta), sin(theta));
@@ -767,9 +782,15 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                         unnormalied_confidences[0] = 1.0;
                         unnormalied_confidences[1] = 0.0;
                     }
-                    //unnormalied_confidences[0] = 1.0;unnormalied_confidences[1] = 0.0;
                     let confidence_sum = unnormalied_confidences[0] + unnormalied_confidences[1];
                     var confidences = array<f32, 2>(unnormalied_confidences[0] / confidence_sum, unnormalied_confidences[1] / confidence_sum);
+
+                    // var markov_weight = confidences[1];
+                    // if dot(dir_markov, intersection.normal) < 0.0 {
+                    //     //markov_weight = 0.0;
+                    // }
+                    // let markov_chain_pdf = select(all_vmf_pdfs(ray.origin, dir), 0.0, confidences[1] == 0.0);
+                    // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_markov, markov_chain_pdf), markov_weight, &self_seed);
                     var final_pdf: f32;
                     var norm_divisor = 1.0;
                     let weight = confidences[0];
@@ -785,8 +806,11 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                         //sample.color = (dir_markov + 1) / 2;
                         //return sample;
                     }
-                    let cosine_pdf = max(dot(dir, intersection.normal) / PI, 0.0);
                     let avg_pdf = ((confidences[0] * cosine_pdf) + select(confidences[1] * max(all_vmf_pdfs(ray.origin, dir), 0.0), 0.0, confidences[1] == 0.0));
+
+                    // let avg_pdf = (wrs.current_weight / wrs.weight_sum) * wrs.current_elem.w;
+                    // let avg_pdf = cosine_pdf * (cosine_weight / wrs.weight_sum) + markov_chain_pdf * (markov_weight / wrs.weight_sum);
+                    // dir = wrs.current_elem.xyz;
                     final_pdf = avg_pdf;
                     norm_divisor = avg_pdf;
                     //vmf_weight *= avg_pdf;
@@ -852,6 +876,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 //sample.color = vec3f(1.0);
                 //return sample;
             }
+            if i == 0 {
+                first_dir = ray.direction;
+            }
             //sample.color = ray.direction;
             //return sample;
         } else {
@@ -892,10 +919,12 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     sample.color /= vmf_weight;
     sample.out_radiance /= vmf_weight;
     storageBarrier();
-    //sample.color = vec3(get_kappa(tentative_marcov_chain_state) / 100.0);
-    //sample.color = vec3((normalize(get_light_dir(tentative_marcov_chain_state, sample.point)) + 1.0) / 2.0);
-    //sample.color = vec3(get_kappa(world_cache) / 50.0);
-    //sample.color = vec3((normalize(get_light_dir(world_cache, sample.point)) + 1.0) / 2.0);
+    // sample.albedo = first_dir;
+    // sample.color = vec3(get_kappa(tentative_marcov_chain_state) / 100.0);
+    // sample.albedo = vec3((normalize(get_light_dir(tentative_marcov_chain_state, sample.point)) + 1.0) / 2.0);
+    // sample.color = vec3(get_kappa(world_cache) / 5.0);
+    // sample.albedo = vec3((normalize(get_light_dir(world_cache, sample.point)) + 1.0) / 2.0);
+    //sample.color = safe_div_vec3(state.light_source, state.weight_sum);
     //sample.color = vec3(f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP), (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 10.0, (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 100.0);
     //sample.color = vec3(world_cache.weight_sum / 1.0);
     //sample.color = sample.out_radiance;

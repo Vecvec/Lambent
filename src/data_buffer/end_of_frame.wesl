@@ -4,26 +4,29 @@ import package::importance_sampling::shared::{ unpack_confidance, pack_confidanc
 @group(0) @binding(0)
 var<storage, read_write> eof_gi_reservoirs: array<Reservoir>;
 
-override CONFIDENCE_CAP = 30u;
+struct Immediates {
+    offset: u32,
+    confidence_cap: u32,
+}
 
-var<immediate> offset: u32;
+var<immediate> data: Immediates;
 
 @compute
 @workgroup_size(256, 1, 1)
 fn process_gi_reservoirs(@builtin(global_invocation_id) id: vec3<u32>) {
-    if (id.x + offset) >= arrayLength(&eof_gi_reservoirs) {
+    if (id.x + data.offset) >= arrayLength(&eof_gi_reservoirs) {
         return;
     }
-    var reservoir = eof_gi_reservoirs[id.x + offset];
+    var reservoir = eof_gi_reservoirs[id.x + data.offset];
     // clamp reservoir max while also recalculating the reservoir.w
     var confidance_valid = unpack_confidance(reservoir.packed_confidance_valid);
-    if confidance_valid.confidance > CONFIDENCE_CAP {
-        let new_confidance = CONFIDENCE_CAP;
-        let confidance_mutiplier = f32(CONFIDENCE_CAP) / f32(confidance_valid.confidance);
+    if confidance_valid.confidance > data.confidence_cap {
+        let new_confidance = data.confidence_cap;
+        let confidance_mutiplier = f32(data.confidence_cap) / f32(confidance_valid.confidance);
         confidance_valid.confidance = new_confidance;
         reservoir.w *= confidance_mutiplier;
         reservoir.packed_confidance_valid = pack_confidance(confidance_valid);
-        eof_gi_reservoirs[id.x + offset] = reservoir;
+        eof_gi_reservoirs[id.x + data.offset] = reservoir;
     }
 }
 
@@ -70,7 +73,7 @@ fn correct_radiance(idx: u32) {
 @compute
 @workgroup_size(256, 1, 1)
 fn process_world_markov_chains(@builtin(global_invocation_id) id: vec3<u32>) {
-    let idx = id.x + offset;
+    let idx = id.x + data.offset;
 
     if idx >= arrayLength(&eof_world_markov_chains) {
         return;

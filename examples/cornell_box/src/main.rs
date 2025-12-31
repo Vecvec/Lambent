@@ -8,7 +8,7 @@ use lambent::{
     dispatch_size, low_level::pipeline_layout, path_tracing, textures, DataBuffers, Descriptor,
     Material, MaterialType,
 };
-use lambent::{refractive_indices, BufferType};
+use lambent::{AdvanceOptions, BufferType, refractive_indices};
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
@@ -741,6 +741,11 @@ fn main() {
                 BufferType::MARKOV_CHAIN_SCREEN_SPACE
                     | BufferType::MARKOV_CHAIN_WORLD_SPACE
                     | BufferType::SPATIAL_RESAMPLING,
+                if change_light_brightness {
+                    AdvanceOptions::RESPONSIVE
+                } else {
+                    AdvanceOptions::SLOW
+                }
             );
             queue.submit(Some(encoder.finish()));
             #[cfg(feature = "denoise")]
