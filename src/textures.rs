@@ -137,7 +137,7 @@ fn create_blank_recolour(device: &Device, queue: &Queue) -> TextureView {
             origin: Default::default(),
             aspect: TextureAspect::All,
         },
-        &[1, 1, 1, 1],
+        &[255, 255, 255, 255],
         TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(mem::size_of::<[u8; 4]>() as u32),

@@ -23,6 +23,7 @@ import package::bindings::{
     tex_diffuse,
     tex_emission,
     tex_attributes,
+    tex_recolour,
     bg,
     sam,
     info,
@@ -1028,7 +1029,8 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
             let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
             let tex_coords_float = fma(unpack2x16float(material.tex_pos_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_3) * bary.y)));
             let idx_diffuse = unpack_2xu16(material.tex_idx_diffuse_emission).x;
-            if (!near_zero(textureSampleLevel(tex_diffuse[idx_diffuse], sam, tex_coords_float, intersection.t).w)) {
+            let idx_attributes_ty = unpack_2xu16(material.tex_idx_attributes_ty);
+            if (!near_zero(textureSampleLevel(tex_diffuse[idx_diffuse], sam, tex_coords_float, intersection.t).w) || idx_attributes_ty.y == TRANSPARENT) {
                 rayQueryConfirmIntersection(&rq);
             }
         } else if (intersection.kind == RAY_QUERY_INTERSECTION_AABB) {
@@ -1085,11 +1087,14 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         let tex_coords_float = fma(unpack2x16float(material.tex_pos_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_3) * bary.y)));
 
         //return_intersection.color = vec3f(tex_coords_float, 0.0);
-        return_intersection.color = textureSampleLevel(tex_diffuse[idx_diffuse_emission.x], sam, tex_coords_float, intersection.t).xyz;
+        let diffuse_colour = textureSampleLevel(tex_diffuse[idx_diffuse_emission.x], sam, tex_coords_float, intersection.t).xyz * textureLoad(tex_recolour, unpack_2xu16(material.tex_pos_recolour), 0).xyz;
+        return_intersection.color = diffuse_colour;
+        let emission_scale = bitcast<vec2<f32>>(unpack_2xu16(material.emission_scale) << vec2(16));
         if (idx_diffuse_emission.y != 0xFFFFu) {
-            return_intersection.emission = textureSampleLevel(tex_emission[idx_diffuse_emission.y], sam, tex_coords_float, intersection.t).xyz * material.emission_scale;
+            return_intersection.emission = textureSampleLevel(tex_emission[idx_diffuse_emission.y], sam, tex_coords_float, intersection.t).xyz * emission_scale.x;
             //return_intersection.tri_area = spherical_size(vertices[0] - (*ray).origin, vertices[1] - (*ray).origin, vertices[2] - (*ray).origin);
         }
+        return_intersection.emission += diffuse_colour * emission_scale.y;
         if (idx_attributes_ty.x != 0xFFFFu) {
             let attributes = textureSampleLevel(tex_attributes[idx_attributes_ty.x], sam, tex_coords_float, intersection.t);
             return_intersection.roughness = attributes.xy;

@@ -87,8 +87,29 @@ pub struct Material {
     tex_pos_recolour: u32,
     tex_idx_diffuse_emission: u32,
     tex_idx_attributes_ty: u32,
-    emission_scale: f32,
+    emission_scale: u32,
     refractive_index: u32,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct EmissionScale {
+    /// The emission scale for the 
+    pub emissive_texture_scale: half::bf16,
+    pub diffuse_texture_scale: half::bf16,
+}
+
+impl EmissionScale {
+    pub fn from_emission_scale(scale: f32) -> Self {
+        Self { emissive_texture_scale: half::bf16::from_f32(scale), diffuse_texture_scale: half::bf16::ZERO }
+    }
+    pub fn from_f32(emissive_texture_scale: f32, diffuse_texture_scale: f32) -> Self {
+        Self { emissive_texture_scale: half::bf16::from_f32(emissive_texture_scale), diffuse_texture_scale: half::bf16::from_f32(diffuse_texture_scale) }
+    }
+    fn pack(self) -> u32 {
+        let float_1 = self.emissive_texture_scale.to_ne_bytes();
+        let float_2 = self.diffuse_texture_scale.to_ne_bytes();
+        <u32>::from_ne_bytes([float_1[0], float_1[1], float_2[0], float_2[1]])
+    }
 }
 
 impl Material {
@@ -103,18 +124,18 @@ impl Material {
         tex_pos_1: [f32; 2],
         tex_pos_2: [f32; 2],
         tex_pos_3: [f32; 2],
-        tex_pos_recolour: [f32; 2],
+        tex_pos_recolour: [u16; 2],
         tex_idx_diffuse: u16,
         tex_idx_emission: Option<u16>,
         tex_idx_attributes: Option<u16>,
-        emission_scale: f32,
+        emission_scale: EmissionScale,
         refractive_index: Option<Range<f32>>,
         ty: MaterialType,
     ) -> Self {
         let tex_pos_1 = pack2xf16(tex_pos_1);
         let tex_pos_2 = pack2xf16(tex_pos_2);
         let tex_pos_3 = pack2xf16(tex_pos_3);
-        let tex_pos_recolour = pack2xf16(tex_pos_recolour);
+        let tex_pos_recolour = pack2xu16(tex_pos_recolour);
         let idx = refractive_index.unwrap_or(refractive_indices::VACUUM);
         Self {
             tex_pos_1,
@@ -126,7 +147,7 @@ impl Material {
                 map_optional_idx(tex_idx_emission),
             ]),
             tex_idx_attributes_ty: pack2xu16([map_optional_idx(tex_idx_attributes), ty as u16]),
-            emission_scale,
+            emission_scale: emission_scale.pack(),
             refractive_index: pack2xf16([idx.start, idx.end]),
         }
     }

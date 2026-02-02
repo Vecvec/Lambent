@@ -52,7 +52,7 @@ struct Material {
     tex_pos_recolour: u32,
     tex_idx_diffuse_emission: u32,
     tex_idx_attributes_ty: u32,
-    emission_scale: f32,
+    emission_scale: u32,
     refractive_index: u32,
 }
 
