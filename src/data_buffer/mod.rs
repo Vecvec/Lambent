@@ -16,6 +16,7 @@ pub mod internal {
 }
 
 bitflags::bitflags! {
+    #[derive(Clone, Copy)]
     pub struct BufferType: u16 {
         // Need some of the world space stuff for the
         const MARKOV_CHAIN_SCREEN_SPACE = 1 << 0;
@@ -105,18 +106,10 @@ pub struct DataBuffers {
     processing_bind_group: wgpu::BindGroup,
     limits: Limits,
     world_markov_chain_processing_pipeline: wgpu::ComputePipeline,
+    buffers: BufferType,
 }
 
-impl DataBuffers {
-    pub fn new(
-        device: &Device,
-        mut width: u32,
-        mut height: u32,
-        world_space_buffer_size: u32,
-        buffers: BufferType,
-    ) -> Self {
-        width = width.max(1);
-        height = height.max(1);
+fn create_window_required_buffers(width: u32, height: u32, buffers: BufferType, device: &Device) -> (TemporalBuffers, TemporalBuffers, Buffer) {
         #[cfg(feature = "wip-features")]
         let spatial_buffers = buffers.contains(BufferType::SPATIAL_RESAMPLING);
         #[cfg(not(feature = "wip-features"))]
@@ -131,11 +124,6 @@ impl DataBuffers {
         } else {
             1
         } * size_of::<MarkovChain>() as BufferAddress;
-        let size_markov_world = if buffers.contains(BufferType::MARKOV_CHAIN_WORLD_SPACE) {
-            world_space_buffer_size.max(1) as BufferAddress
-        } else {
-            1
-        } * size_of::<WorldMarkovStorage>() as BufferAddress;
         let info_size = width as BufferAddress
             * height as BufferAddress
             * size_of::<crate::importance_sampling::Info>() as BufferAddress;
@@ -147,6 +135,25 @@ impl DataBuffers {
         });
         let spatial_buffers = TemporalBuffers::new(device, size_spatial);
         let markov_buffers = TemporalBuffers::new(device, size_markov);
+        (spatial_buffers, markov_buffers, info)
+}
+
+impl DataBuffers {
+    pub fn new(
+        device: &Device,
+        mut width: u32,
+        mut height: u32,
+        world_space_buffer_size: u32,
+        buffers: BufferType,
+    ) -> Self {
+        width = width.max(1);
+        height = height.max(1);
+        let (spatial_buffers, markov_buffers, info) = create_window_required_buffers(width, height, buffers, device);
+        let size_markov_world = if buffers.contains(BufferType::MARKOV_CHAIN_WORLD_SPACE) {
+            world_space_buffer_size.max(1) as BufferAddress
+        } else {
+            1
+        } * size_of::<WorldMarkovStorage>() as BufferAddress;
         let markov_world_buffers = TemporalBuffers::new(device, size_markov_world);
 
         let shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -230,8 +237,23 @@ impl DataBuffers {
             world_markov_chain_processing_pipeline,
             processing_bind_group,
             limits: device.limits(),
+            buffers,
         }
     }
+
+    /// Resizes the data buffers to be at least as large as the new width and height (but may be larger).
+    /// It is not guaranteed that any buffer will be recreated, only that they will have enough size after this.
+    /// Therefore, contents may be preserved.
+    /// 
+    /// Bind groups already created by this will not be updated.
+    pub fn resize(&mut self, device: &Device, mut width: u32, mut height: u32) {
+        width = width.max(1);
+        height = height.max(1);
+        let (spatial_buffers, markov_buffers, info) = create_window_required_buffers(width, height, self.buffers, device);
+        self.spatial_resampling = spatial_buffers;
+        self.markov_chain_screen_space = markov_buffers;
+        self.info = info;
+    } 
 
     /// Updates states to correct for a new frame, if a buffer is within
     /// `buffers_to_temporally_advance`, data will be moved to last frames buffer, otherwise it will
