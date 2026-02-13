@@ -41,9 +41,9 @@ impl SpatialResampling {
         use wesl::include_wesl;
 
         Shader {
-            base: include_wesl!("importance_sampler").to_string(),
+            base: include_wesl!("spatial_resampling").to_string(),
             #[cfg(debug_assertions)]
-            label: "Importance Sampler",
+            label: "Spatial Resampler",
         }
     }
 
@@ -80,6 +80,81 @@ impl SpatialResampling {
                     constants: overrides,
                     zero_initialize_workgroup_memory: true,
                 },
+                cache: None,
+            })
+    }
+}
+
+#[cfg(feature = "wip-features")]
+/// A shader for importance sampling. Based off reSTIR GI.
+pub struct TemporalResampling {
+    device: Device,
+    extra_bgls: Vec<BindGroupLayout>,
+}
+
+#[cfg(feature = "wip-features")]
+impl TemporalResampling {
+    pub fn new(device: &Device) -> Self {
+        let mut resampler = Self {
+            device: device.clone(),
+            // intersection_handler: "".to_string(),
+            // shader: PhantomData,
+            extra_bgls: Vec::new(),
+            // resolver: None,
+        };
+        resampler.set_intersection_handler(&intersection_handlers::DefaultIntersectionHandler);
+        resampler
+    }
+
+    pub fn set_intersection_handler(&mut self, handler: &dyn IntersectionHandler) {
+        // self.intersection_handler = handler.source();
+        self.extra_bgls = handler.additional_bind_group_layouts(&self.device);
+        // self.resolver = handler.resolver().map(|h| RcResolver(h));
+    }
+
+    pub fn features() -> Features {
+        // features required to interact
+        Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+    }
+    fn create_shader() -> Shader {
+        use wesl::include_wesl;
+
+        Shader {
+            base: include_wesl!("temporal_resampling").to_string(),
+            #[cfg(debug_assertions)]
+            label: "Temporal Resampler",
+        }
+    }
+
+    pub fn create_pipeline(
+        &self,
+        blas_count: NonZeroU32,
+        diffuse_count: NonZeroU32,
+        emission_count: NonZeroU32,
+        attribute_count: NonZeroU32,
+    ) -> ComputePipeline {
+        use wgpu::ComputePipelineDescriptor;
+
+        use crate::low_level;
+
+        let pipeline_layout = low_level::pipeline_layout(
+            &self.device,
+            blas_count,
+            diffuse_count,
+            emission_count,
+            attribute_count,
+            &self.extra_bgls,
+        );
+
+        let shader = self.device.create_shader_module(Self::create_shader().descriptor());
+
+        self.device
+            .create_compute_pipeline(&ComputePipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                module: &shader,
+                entry_point: None,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             })
     }

@@ -83,10 +83,16 @@ fn main() {
     // build ReSTIR GI style processor
     // TODO: we may want to patially compile this if we do ray traced validation
     standard_compiler(true, true).build_artifact(
-        &"package::importance_sampling::importance_sampler"
+        &"package::importance_sampling::spatial_resampling"
             .parse()
             .unwrap(),
-        "importance_sampler",
+        "spatial_resampling",
+    );
+    standard_compiler(true, true).build_artifact(
+        &"package::importance_sampling::temporal_resampling"
+            .parse()
+            .unwrap(),
+        "temporal_resampling",
     );
 
     // Build debugging shaders, also only partially built, so no validation

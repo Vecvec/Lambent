@@ -551,13 +551,7 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
     }
     pdf /= f32(SAMPLES);
     if (sample.ty != SKY && sample_valid) {
-        var R: Reservoir;
-        let resam_R = old_gi_reservoirs[idx];
-        R = resam_R;
-        if dot(u32_to_normalised(R.sample_normal), pixel_normal) < 0.95 {
-            R = Reservoir();
-        }
-        //R.pdf = saturate(sample.pdf);
+        var R = Reservoir();
         let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
         R = update(sample, w, R, own_seed, false);
         own_seed = rand_u32(own_seed);

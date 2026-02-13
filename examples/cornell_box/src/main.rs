@@ -2,10 +2,10 @@ use cgmath::{Matrix4, Point3, Vector3};
 use futures::executor::block_on;
 use glfw::{fail_on_errors, ClientApiHint, WindowHint, WindowMode};
 use lambent::camera::Camera;
-use lambent::importance_sampling::SpatialResampling;
+use lambent::importance_sampling::{SpatialResampling, TemporalResampling};
 use lambent::textures::TextureLoader;
 use lambent::{
-    dispatch_size, low_level::pipeline_layout, path_tracing, textures, DataBuffers, Descriptor,
+    dispatch_size, path_tracing, textures, DataBuffers, Descriptor,
     Material, MaterialType,
 };
 use lambent::{AdvanceOptions, BufferType, refractive_indices};
@@ -332,15 +332,6 @@ fn main() {
         None,
     );
 
-    let pipeline_layout = pipeline_layout(
-        &device,
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(4).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-        &[],
-    );
-
     let compute_pipeline = ray_tracer.create_pipeline(
         NonZeroU32::new(1).unwrap(),
         NonZeroU32::new(4).unwrap(),
@@ -349,25 +340,27 @@ fn main() {
         &[("SAMPLES", SAMPLES as f64)],
     );
 
-    let is_shader = SpatialResampling::create_shader();
-    let is_shader = device.create_shader_module(is_shader.descriptor());
-    let is_compute_pipeline: wgpu::ComputePipeline =
-        device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            module: &is_shader,
-            entry_point: None,
-            compilation_options: PipelineCompilationOptions {
-                constants: &[
-                    //("SAMPLES", SAMPLES as f64),
-                    ("IS_SAMPLES", IS_SAMPLES as f64),
-                    ("IS_SPACE", IS_SPACE as f64),
-                    //("IMPORTANCE_LIKELIHOOD".to_string(), 0.3),
-                ],
-                ..Default::default()
-            },
-            cache: None,
-        });
+    let temporal_resampling = TemporalResampling::new(&device);
+    let temporal_compute_pipeline: wgpu::ComputePipeline = temporal_resampling.create_pipeline(
+        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(4).unwrap(),
+        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(1).unwrap(),
+    );
+
+    let spacial_resampling = SpatialResampling::new(&device);
+    let spacial_compute_pipeline: wgpu::ComputePipeline = spacial_resampling.create_pipeline(
+        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(4).unwrap(),
+        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(1).unwrap(),
+        &[
+            //("SAMPLES", SAMPLES as f64),
+            ("IS_SAMPLES", IS_SAMPLES as f64),
+            ("IS_SPACE", IS_SPACE as f64),
+            //("IMPORTANCE_LIKELIHOOD".to_string(), 0.3),
+        ],
+    );
 
     #[cfg(feature = "denoise")]
     let oidn_device = oidn::Device::new();
@@ -719,8 +712,10 @@ fn main() {
                 comp_pass.set_immediates(0, &num_frames.to_ne_bytes());
                 let size = dispatch_size(SIZE, SIZE);
                 comp_pass.dispatch_workgroups(size.width, size.height, 1);
-                comp_pass.set_pipeline(&is_compute_pipeline);
                 if importance_sampling {
+                    comp_pass.set_pipeline(&temporal_compute_pipeline);
+                    comp_pass.dispatch_workgroups(size.width, size.height, 1);
+                    comp_pass.set_pipeline(&spacial_compute_pipeline);
                     comp_pass.dispatch_workgroups(size.width, size.height, 1);
                 }
             }
