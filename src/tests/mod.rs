@@ -3,7 +3,10 @@ use crate::camera::Camera;
 use crate::importance_sampling::SpatialResampling;
 use crate::low_level::RayTracingShaderDST;
 use crate::textures::TextureLoader;
-use crate::{AdvanceOptions, Descriptor, Material, MaterialType, Vertices, debug, dispatch_size, path_tracing, textures};
+use crate::{
+    debug, dispatch_size, path_tracing, textures, AdvanceOptions, Descriptor, Material,
+    MaterialType, Vertices,
+};
 use crate::{BufferType, DataBuffers};
 use cgmath::{ElementWise, Matrix4, Point3, Vector3};
 use futures::executor::block_on;
@@ -146,16 +149,19 @@ fn test() {
         ),
     ];
     let material_indices = [0, 1, 2, 3, 4, 5, 6, 7];
-    let vertices = Vertices { geometry_stride: 0, vertices: vec![
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 1.0, 1.0, 0.0],
-        [1.0, 0.0, 0.0, 0.0],
-        [1.0, 0.0, 1.0, 0.0],
-        [1.0, 1.0, 0.0, 0.0],
-        [1.0, 1.0, 1.0, 0.0],
-    ]};
+    let vertices = Vertices {
+        geometry_stride: 0,
+        vertices: vec![
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 1.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 0.0],
+        ],
+    };
     let indices = [
         0, 1, 2, 3, 2, 1, 0, 4, 1, 1, 5, 4, 0, 2, 4, 6, 4, 2, 2, 3, 6, 7, 6, 3,
     ];
@@ -520,15 +526,11 @@ fn run_shader(
             },
             BindGroupEntry {
                 binding: 3,
-                resource: BindingResource::BufferArray(&[
-                    vertex_buffer.as_entire_buffer_binding()
-                ]),
+                resource: BindingResource::BufferArray(&[vertex_buffer.as_entire_buffer_binding()]),
             },
             BindGroupEntry {
                 binding: 4,
-                resource: BindingResource::BufferArray(&[
-                    index_buffer.as_entire_buffer_binding()
-                ]),
+                resource: BindingResource::BufferArray(&[index_buffer.as_entire_buffer_binding()]),
             },
         ],
     });

@@ -5,10 +5,9 @@ use lambent::camera::Camera;
 use lambent::importance_sampling::{SpatialResampling, TemporalResampling};
 use lambent::textures::TextureLoader;
 use lambent::{
-    dispatch_size, path_tracing, textures, DataBuffers, Descriptor,
-    Material, MaterialType,
+    dispatch_size, path_tracing, textures, DataBuffers, Descriptor, Material, MaterialType,
 };
-use lambent::{AdvanceOptions, BufferType, refractive_indices};
+use lambent::{refractive_indices, AdvanceOptions, BufferType};
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
@@ -32,11 +31,11 @@ use wgpu::{
     ColorTargetState, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor,
     CreateBlasDescriptor, CreateTlasDescriptor, DeviceDescriptor, ExperimentalFeatures, Extent3d,
     Features, FragmentState, IndexFormat, InstanceDescriptor, Limits, Operations,
-    PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode,
-    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-    RequestAdapterOptions, ShaderStages, SurfaceError, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension,
-    TlasInstance, VertexFormat, VertexState,
+    PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode, RenderPassColorAttachment,
+    RenderPassDescriptor, RenderPipelineDescriptor, RequestAdapterOptions, ShaderStages,
+    SurfaceError, TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat,
+    VertexState,
 };
 
 type RayTracer = lambent::RayTracer<path_tracing::Medium>;
@@ -249,25 +248,29 @@ fn main() {
         adapter.limits().max_binding_array_elements_per_shader_stage as usize,
         maximum,
     );
-    let (device, queue) = block_on(adapter.request_device(&DeviceDescriptor {
-        label: None,
-        required_features: RayTracer::required_features()
-            | Features::TEXTURE_BINDING_ARRAY
-            | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-            | Features::BGRA8UNORM_STORAGE
-            | SpatialResampling::features(),
-        // it's recommended to only use limits you need (due to possible perf issues)
-        required_limits: RayTracer::required_limits().or_better_values_from(&Limits {
-            max_binding_array_elements_per_shader_stage: max(
-                target_exe_num as u32,
-                Limits::default().max_binding_array_elements_per_shader_stage,
-            ),
-            ..Limits::default()
-        }).using_minimum_supported_acceleration_structure_values(),
-        memory_hints: wgpu::MemoryHints::default(),
-        trace: Default::default(),
-        experimental_features: unsafe { ExperimentalFeatures::enabled() },
-    }))
+    let (device, queue) = block_on(
+        adapter.request_device(&DeviceDescriptor {
+            label: None,
+            required_features: RayTracer::required_features()
+                | Features::TEXTURE_BINDING_ARRAY
+                | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+                | Features::BGRA8UNORM_STORAGE
+                | SpatialResampling::features(),
+            // it's recommended to only use limits you need (due to possible perf issues)
+            required_limits: RayTracer::required_limits()
+                .or_better_values_from(&Limits {
+                    max_binding_array_elements_per_shader_stage: max(
+                        target_exe_num as u32,
+                        Limits::default().max_binding_array_elements_per_shader_stage,
+                    ),
+                    ..Limits::default()
+                })
+                .using_minimum_supported_acceleration_structure_values(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+            experimental_features: unsafe { ExperimentalFeatures::enabled() },
+        }),
+    )
     .unwrap();
     println!(
         "targeting {} samples with {} execution(s)",
@@ -740,7 +743,7 @@ fn main() {
                     AdvanceOptions::RESPONSIVE
                 } else {
                     AdvanceOptions::SLOW
-                }
+                },
             );
             queue.submit(Some(encoder.finish()));
             #[cfg(feature = "denoise")]

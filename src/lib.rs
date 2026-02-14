@@ -24,7 +24,7 @@ pub mod textures;
 
 use crate::low_level::rc_resolver::RcResolver;
 use crate::low_level::{IntersectionHandler, RayTracingShader, RayTracingShaderDST};
-pub use data_buffer::{BufferType, DataBuffers, AdvanceOptions};
+pub use data_buffer::{AdvanceOptions, BufferType, DataBuffers};
 
 /// Refractive indices from https://refractiveindex.info/
 pub mod refractive_indices {
@@ -93,17 +93,23 @@ pub struct Material {
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct EmissionScale {
-    /// The emission scale for the 
+    /// The emission scale for the
     pub emissive_texture_scale: half::bf16,
     pub diffuse_texture_scale: half::bf16,
 }
 
 impl EmissionScale {
     pub fn from_emission_scale(scale: f32) -> Self {
-        Self { emissive_texture_scale: half::bf16::from_f32(scale), diffuse_texture_scale: half::bf16::ZERO }
+        Self {
+            emissive_texture_scale: half::bf16::from_f32(scale),
+            diffuse_texture_scale: half::bf16::ZERO,
+        }
     }
     pub fn from_f32(emissive_texture_scale: f32, diffuse_texture_scale: f32) -> Self {
-        Self { emissive_texture_scale: half::bf16::from_f32(emissive_texture_scale), diffuse_texture_scale: half::bf16::from_f32(diffuse_texture_scale) }
+        Self {
+            emissive_texture_scale: half::bf16::from_f32(emissive_texture_scale),
+            diffuse_texture_scale: half::bf16::from_f32(diffuse_texture_scale),
+        }
     }
     fn pack(self) -> u32 {
         let float_1 = self.emissive_texture_scale.to_ne_bytes();

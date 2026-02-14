@@ -4,8 +4,8 @@ use wesl::Resolver;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
     BufferBindingType, BufferSize, Device, Features, Limits, PipelineLayout,
-    PipelineLayoutDescriptor, SamplerBindingType, ShaderStages,
-    StorageTextureAccess, TextureFormat, TextureSampleType, TextureViewDimension,
+    PipelineLayoutDescriptor, SamplerBindingType, ShaderStages, StorageTextureAccess,
+    TextureFormat, TextureSampleType, TextureViewDimension,
 };
 
 pub(crate) mod rc_resolver {

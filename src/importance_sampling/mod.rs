@@ -2,7 +2,7 @@
 use std::num::NonZeroU32;
 
 #[cfg(feature = "wip-features")]
-use crate::{Shader, intersection_handlers, low_level::IntersectionHandler};
+use crate::{intersection_handlers, low_level::IntersectionHandler, Shader};
 #[cfg(feature = "wip-features")]
 use wgpu::{BindGroupLayout, ComputePipeline, Device, Features};
 
@@ -68,7 +68,9 @@ impl SpatialResampling {
             &self.extra_bgls,
         );
 
-        let shader = self.device.create_shader_module(Self::create_shader().descriptor());
+        let shader = self
+            .device
+            .create_shader_module(Self::create_shader().descriptor());
 
         self.device
             .create_compute_pipeline(&ComputePipelineDescriptor {
@@ -146,7 +148,9 @@ impl TemporalResampling {
             &self.extra_bgls,
         );
 
-        let shader = self.device.create_shader_module(Self::create_shader().descriptor());
+        let shader = self
+            .device
+            .create_shader_module(Self::create_shader().descriptor());
 
         self.device
             .create_compute_pipeline(&ComputePipelineDescriptor {
