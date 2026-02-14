@@ -12,7 +12,7 @@ use wgpu::{
 };
 
 pub mod camera;
-mod data_buffer;
+pub mod data_buffer;
 pub mod debug;
 pub mod importance_sampling;
 pub mod intersection_handlers;

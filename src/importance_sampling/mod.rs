@@ -164,23 +164,28 @@ impl TemporalResampling {
     }
 }
 
-pub(crate) struct Reservoir {
-    _visible_point: [f32; 3],
-    _visible_normal: u32,
-    _sample_point: [f32; 3],
-    _sample_normal: u32,
-    _out_radiance: [f32; 3],
-    _ty: u32,
-    _roughness: f32,
-    _pdf: f32,
-    _w: f32,
-    _m_valid: u32,
-    _full_w: f32,
-    _pad: [f32; 3],
+pub(crate) use internal_layouts::*;
+
+pub mod internal_layouts {
+    pub struct Reservoir {
+        _visible_point: [f32; 3],
+        _visible_normal: u32,
+        _sample_point: [f32; 3],
+        _sample_normal: u32,
+        _out_radiance: [f32; 3],
+        _ty: u32,
+        _roughness: f32,
+        _pdf: f32,
+        _w: f32,
+        _m_valid: u32,
+        _full_w: f32,
+        _pad: [f32; 3],
+    }
+    
+    pub struct Info {
+        _emission: [f32; 4],
+        _albedo: [f32; 4],
+        _cam_loc: [f32; 4],
+    }
 }
 
-pub(crate) struct Info {
-    _emission: [f32; 4],
-    _albedo: [f32; 4],
-    _cam_loc: [f32; 4],
-}

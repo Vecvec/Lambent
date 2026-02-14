@@ -26,37 +26,41 @@ bitflags::bitflags! {
     }
 }
 
-/// Matches markov chain in bindings.
-#[repr(C)]
-struct MarkovChain {
-    _light_source: [f32; 3],
-    _mean_cosine: f32,
-    _weight_sum: f32,
-    _num_samples: u32,
-    _score: f32,
-    _align: u32,
+pub mod internal_layouts {
+    /// Matches markov chain in bindings.
+    #[repr(C)]
+    pub struct MarkovChain {
+        _light_source: [f32; 3],
+        _mean_cosine: f32,
+        _weight_sum: f32,
+        _num_samples: u32,
+        _score: f32,
+        _align: u32,
+    }
+    
+    /// Matches atomic markov chain in bindings.
+    #[repr(C)]
+    pub struct AtomicMarkovChain {
+        _light_source: [f32; 3],
+        _mean_cosine: f32,
+        _weight_sum: f32,
+        _num_samples: u32,
+        _score: f32,
+        // align unneeded.
+    }
+    
+    #[repr(C)]
+    pub struct WorldMarkovStorage {
+        _secondary_hash: u32,
+        _num_samples: u32,
+        _radiance: [u32; 3],
+        _lock: u32,
+        _chain: AtomicMarkovChain,
+        _timeout: u32,
+    }
 }
 
-/// Matches atomic markov chain in bindings.
-#[repr(C)]
-struct AtomicMarkovChain {
-    _light_source: [f32; 3],
-    _mean_cosine: f32,
-    _weight_sum: f32,
-    _num_samples: u32,
-    _score: f32,
-    // align unneeded.
-}
-
-#[repr(C)]
-struct WorldMarkovStorage {
-    _secondary_hash: u32,
-    _num_samples: u32,
-    _radiance: [u32; 3],
-    _lock: u32,
-    _chain: AtomicMarkovChain,
-    _timeout: u32,
-}
+use internal_layouts::*;
 
 struct TemporalBuffers {
     current: Buffer,
@@ -426,6 +430,12 @@ impl DataBuffers {
                 },
             ],
         })
+    }
+
+    /// Get last frame's spatial resampling buffer. This has [wgpu::BufferUsages::STORAGE] | [wgpu::BufferUsages::COPY_DST].
+    /// Intended for temporal reprojection.
+    pub fn previous_spacial_resampling_buffer(&self) -> &wgpu::Buffer {
+        &self.markov_chain_screen_space.old
     }
 }
 
