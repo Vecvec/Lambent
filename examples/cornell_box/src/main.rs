@@ -33,7 +33,7 @@ use wgpu::{
     Features, FragmentState, IndexFormat, InstanceDescriptor, Limits, Operations,
     PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipelineDescriptor, RequestAdapterOptions, ShaderStages,
-    SurfaceError, TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType,
     TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat,
     VertexState,
 };
@@ -240,7 +240,7 @@ fn main() {
         4, 4, 4,
     ];
 
-    let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(InstanceDescriptor::new_without_display_handle());
     let adapter = block_on(instance.request_adapter(&RequestAdapterOptions::default()))
         .expect("failed to find a suitable adapter");
     // a reasonable limit (128 if the seed changes)
@@ -389,7 +389,7 @@ fn main() {
 
     let averaging_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&averaging_pipeline_in_layout, &oidn_state.staging_bgl],
+        bind_group_layouts: &[Some(&averaging_pipeline_in_layout), Some(&oidn_state.staging_bgl)],
         immediate_size: 4,
     });
 
@@ -409,7 +409,7 @@ fn main() {
 
     let copy_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&oidn_state.staging_bgl],
+        bind_group_layouts: &[Some(&oidn_state.staging_bgl)],
         immediate_size: 0,
     });
 
@@ -645,16 +645,19 @@ fn main() {
         }
         glfw.poll_events();
         let surface_texture = match surface.get_current_texture() {
-            Ok(tex) => tex,
-            Err(err) => match err {
-                SurfaceError::Outdated | SurfaceError::Lost => {
-                    surface_config.width = max(window.get_size().0 as u32, 1);
-                    surface_config.height = max(window.get_size().1 as u32, 1);
-                    surface.configure(&device, &surface_config);
-                    continue;
-                }
-                err => panic!("{:?}", err),
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            err @ wgpu::CurrentSurfaceTexture::Timeout | err @ wgpu::CurrentSurfaceTexture::Occluded => {
+                println!("Recoverable error during surface obtaining {err:?}");
+                continue
             },
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                surface_config.width = max(window.get_size().0 as u32, 1);
+                surface_config.height = max(window.get_size().1 as u32, 1);
+                surface.configure(&device, &surface_config);
+                continue;
+            },
+            err => panic!("{:?}", err),
         };
         let texture = device.create_texture(&TextureDescriptor {
             label: None,

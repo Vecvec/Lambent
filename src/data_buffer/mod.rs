@@ -199,7 +199,7 @@ impl DataBuffers {
 
         let processing_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("(phosph_rs internal) End of frame processing pipeline layout"),
-            bind_group_layouts: &[&processing_bgl],
+            bind_group_layouts: &[Some(&processing_bgl)],
             immediate_size: 8,
         });
 

@@ -272,7 +272,7 @@ pub fn pipeline_layout(
     bgls.extend(extra_bgls.iter());
     device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&mat_bgl, &out_bgl, &texture_bgl],
+        bind_group_layouts: &[Some(&mat_bgl), Some(&out_bgl), Some(&texture_bgl)],
         immediate_size: 4,
     })
 }

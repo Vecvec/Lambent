@@ -53,6 +53,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
         R = Reservoir();
     }
 
+    if Rs.ty == SKY {
+        return;
+    }
+
     let w = p_hat(sam_from_res(R));
     R = merge(Rs, R, w, own_seed).reservoir;
     let confidance = unpack_confidance(R.packed_confidance_valid).confidance;
