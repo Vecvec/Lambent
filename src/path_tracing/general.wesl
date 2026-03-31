@@ -550,6 +550,13 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
         //lights.samples[idx] = update(sample, 1.0, lights.samples[idx], own_seed);
     }
     pdf /= f32(SAMPLES);
+    info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
+    markov_chains[idx] = tentative_marcov_chain_state;
+    textureStore(output_normal, id.xy, vec4<f32>(pixel_normal, 1.0));
+    textureStore(output_albedo, id.xy, vec4<f32>(pixel_albedo, 1.0));
+    textureStore(output, id.xy, vec4<f32>(max(pixel_color / f32(SAMPLES), vec3<f32>(0.0)), 1.0));
+
+    // put collective samples into GI
     if (sample.ty != SKY && sample_valid) {
         var R = Reservoir();
         let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
@@ -563,10 +570,8 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
         R.ty = SKY;
         gi_reservoirs[idx] = R;
     }
-    info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
     //lights.samples[idx].out_radiance = out_radiance / f32(SAMPLES);
     //lights.samples[idx].W = lights.samples[idx].w / max(0.00001, (f32(unpack4xU8(lights.samples[idx].M_valid).x) * p_hat(sam_from_res(lights.samples[idx]), pixel_normal, lights.samples[idx].sample_point, pixel_albedo, -normalize(lights.samples[idx].sample_point - cam_loc))));
-    markov_chains[idx] = tentative_marcov_chain_state;
     textureStore(output_normal, id.xy, vec4<f32>(pixel_normal, 1.0));
     textureStore(output_albedo, id.xy, vec4<f32>(pixel_albedo, 1.0));
     textureStore(output, id.xy, vec4<f32>(max(pixel_color / f32(SAMPLES), vec3<f32>(0.0)), 1.0));
