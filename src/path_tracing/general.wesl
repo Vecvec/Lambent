@@ -387,13 +387,13 @@ fn fill_mc_screen_space_states(own_seed: ptr<function, u32>, sub_size: u32, pix_
 const JITTER_SIZE = GRID_SIZE * 1.5;
 //const JITTER_SIZE = 0.0;
 fn fill_mc_world_space_states(own_seed: ptr<function, u32>, pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) {
-    for (var i = 0; i < NUM_RESAMPLES_WORLD_SPACE; i++) {
+    for (var i = (NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME); i < NUM_NON_PIXEL_RESAMPLES; i++) {
         let force_self = i == 0;
         let rand_candidate = rand_f32(*own_seed) < 0.7 && !force_self;
         let jitter_mul = select(select(1.0, 0.75, rand_candidate), 0.0, force_self);
         let jitter = rand_xz_vec3_f32(own_seed)*JITTER_SIZE*jitter_mul;
         let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, rand_candidate);
-        other_pixels_marcov_chain_states.state[(NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME) + i] = s;
+        other_pixels_marcov_chain_states.state[i] = s;
         *own_seed++;
     }
     other_pixels_marcov_chain_states.state[NUM_NON_PIXEL_RESAMPLES] = tentative_marcov_chain_state;
@@ -572,9 +572,6 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
     }
     //lights.samples[idx].out_radiance = out_radiance / f32(SAMPLES);
     //lights.samples[idx].W = lights.samples[idx].w / max(0.00001, (f32(unpack4xU8(lights.samples[idx].M_valid).x) * p_hat(sam_from_res(lights.samples[idx]), pixel_normal, lights.samples[idx].sample_point, pixel_albedo, -normalize(lights.samples[idx].sample_point - cam_loc))));
-    textureStore(output_normal, id.xy, vec4<f32>(pixel_normal, 1.0));
-    textureStore(output_albedo, id.xy, vec4<f32>(pixel_albedo, 1.0));
-    textureStore(output, id.xy, vec4<f32>(max(pixel_color / f32(SAMPLES), vec3<f32>(0.0)), 1.0));
     //textureStore(output, id.xy, vec4<f32>(vec3((lights.samples[idx].W / 5.0)), 1.0));
 }
 
