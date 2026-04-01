@@ -1,5 +1,11 @@
-use crate::{DynamicRayTracer, RayTracer};
-use std::{num::NonZeroU32, rc::Rc};
+//! Lower level abstraction over things that are needed.
+//! 
+//! WARNING: You should not use these. They are exposed only to allow
+//! other crates to implement them. If you use these, there will be
+//! much more frequent and more subtle (and complex) breaking changes.
+
+use crate::{DynamicRayTracer, RayTracer, low_level};
+use std::{any::Any, num::NonZeroU32, rc::Rc};
 use wesl::Resolver;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
@@ -29,6 +35,48 @@ pub(crate) mod rc_resolver {
         fn fs_path(&self, path: &ModulePath) -> Option<PathBuf> {
             (*self.0).fs_path(path)
         }
+    }
+}
+
+/// Different ray tracer options, should accept any name in get, if it isn't defined, should return `()`
+pub trait RayTracerOptions {
+    fn samples(&self) -> NonZeroU32 {
+        *self.samples_ref()
+    }
+
+    fn get<'a>(&'a self, name: &'static str) -> &'a dyn Any {
+        if name == "sample" {
+            self.samples_ref()
+        } else {
+            self.get_non_sample(name)
+        }
+    }
+
+    #[doc(hidden)]
+    fn get_non_sample<'a>(&'a self, name: &'static str) -> &'a dyn Any;
+    #[doc(hidden)]
+    fn samples_ref(&self) -> &NonZeroU32;
+}
+
+pub struct RayTracingOptions {
+    pub samples: NonZeroU32,
+}
+
+impl RayTracerOptions for RayTracingOptions {
+    fn get_non_sample<'a>(&'a self, _name: &'static str) -> &'a dyn Any {
+        &()
+    }
+
+    fn samples_ref(&self) -> &NonZeroU32 {
+        &self.samples
+    }
+}
+
+pub const DEFAULT_NUM_SAMPLES: NonZeroU32 = NonZeroU32::new(4).unwrap();
+
+impl Default for RayTracingOptions {
+    fn default() -> Self {
+        Self { samples: DEFAULT_NUM_SAMPLES }
     }
 }
 
@@ -66,7 +114,9 @@ pub unsafe trait IntersectionHandler: 'static {
     }
 }
 
-/// It is considered a logic error if the module does not pass validation (but does *not* cause UB)
+/// It is considered a logic error if the module does not pass validation (but does *not* cause UB).
+/// The source returned from `shader_source_without_intersection_handler` should have an override called
+/// `SAMPLES`.
 ///
 /// # Safety:
 ///
@@ -101,24 +151,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
             ..Limits::default()
         }
     }
-    #[deprecated]
-    fn limits_or(limit: Limits) -> Limits {
-        // limits required to interact
-        Limits {
-            max_immediate_size: 4.max(limit.max_immediate_size),
-            max_storage_buffer_binding_size: (Limits::default().max_storage_buffer_binding_size)
-                .max(limit.max_storage_buffer_binding_size),
-            max_binding_array_elements_per_shader_stage: 500_000
-                .max(limit.max_binding_array_elements_per_shader_stage),
-            max_acceleration_structures_per_shader_stage: 16
-                .max(limit.max_acceleration_structures_per_shader_stage),
-            max_blas_geometry_count: ((1 << 24) - 1).max(limit.max_blas_geometry_count),
-            max_tlas_instance_count: ((1 << 24) - 1).max(limit.max_tlas_instance_count),
-            max_blas_primitive_count: (1 << 28).max(limit.max_blas_primitive_count),
-            ..limit
-        }
-    }
-    fn shader_source_without_intersection_handler() -> String;
+    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions) -> String;
     #[cfg(debug_assertions)]
     fn label() -> &'static str;
 }
@@ -133,9 +166,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
 pub unsafe trait RayTracingShaderDST {
     fn features(&self) -> Features;
     fn limits(&self) -> Limits;
-    #[deprecated]
-    fn limits_or(&self, limit: Limits) -> Limits;
-    fn shader_source_without_intersection_handler(&self) -> String;
+    fn shader_source_without_intersection_handler(&self, opts: &dyn low_level::RayTracerOptions) -> String;
     #[cfg(debug_assertions)]
     fn label(&self) -> &'static str;
     fn dyn_ray_tracer(&self, device: &Device) -> DynamicRayTracer;
@@ -152,13 +183,8 @@ unsafe impl<T: RayTracingShader> RayTracingShaderDST for T {
     fn limits(&self) -> Limits {
         T::limits()
     }
-    // this method is also depricated
-    #[expect(deprecated)]
-    fn limits_or(&self, limit: Limits) -> Limits {
-        T::limits_or(limit)
-    }
-    fn shader_source_without_intersection_handler(&self) -> String {
-        T::shader_source_without_intersection_handler()
+    fn shader_source_without_intersection_handler(&self, opts: &dyn low_level::RayTracerOptions) -> String {
+        T::shader_source_without_intersection_handler(opts)
     }
     #[cfg(debug_assertions)]
     fn label(&self) -> &'static str {

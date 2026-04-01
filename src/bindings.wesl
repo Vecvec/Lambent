@@ -163,10 +163,9 @@ struct Reservoir {
     out_radiance: vec3<f32>,    // 32 16 12
     ty: u32,                    // 44 4 4
     roughness: f32,             // 48 4 4
-    pdf:f32,                    // 52 4 4
-    w: f32,                     // 56 4 4
-    packed_confidance_valid: u32,    // 60 4 4
-    W: f32,                     // 64 4 4
+    w: f32,                     // 52 4 4
+    packed_confidance_valid: u32,    // 56 4 4
+    W: f32,                     // 60 4 4
 }
 
 const SMALL_VAL:f32 = 0.0001;

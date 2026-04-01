@@ -499,6 +499,10 @@ fn get_light_dir(state: MarcovChainState, current: vec3<f32>) -> vec3<f32> {
 
 var<private> camera_loc: vec3<f32>;
 
+const RESTIR_OPTION_NONE: u32 = 0;
+const RESTIR_OPTION_PER_SAMPLE: u32 = 1;
+const RESTIR_OPTION_PER_PIXEL: u32 = 2;
+
 @workgroup_size(64, 1, 1)
 @compute
 fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) work_id: vec3<u32>, @builtin(subgroup_size) sub_size:u32, @builtin(subgroup_invocation_id) sub_id: u32) {
@@ -523,6 +527,8 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
     var sample_valid = false;
     var pdf = 0.0;
     let next_sub_id = (sub_id + 1) % sub_size;
+
+    var R = Reservoir();
     for (var i = 0u; i < SAMPLES; i++) {
         fill_mc_screen_space_states(&own_seed, sub_size, id.xy, screen_size);
         let ray_sample = rt_sample(id.xy, own_seed, (i == 0u));
@@ -541,35 +547,63 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
             //textureStore(output, id.xy, vec4<f32>(0.0, 1.0, 0.0, 1.0));
             //return;
         }
-        if (ray_sample.valid) {
-            sample_valid = true;
-            sample = Sample(ray_sample.visible_point, normalised_to_u32(ray_sample.visible_normal), ray_sample.point, normalised_to_u32(pixel_normal), out_radiance / f32(SAMPLES), pixel_ty, conv_rough(ray_sample.roughness), 1.0);
-            pdf += ray_sample.pdf;
+        if RESTIR == RESTIR_OPTION_PER_PIXEL {
+            if (ray_sample.valid) {
+                sample_valid = true;
+                sample = Sample(
+                    ray_sample.visible_point,
+                    normalised_to_u32(ray_sample.visible_normal),
+                    ray_sample.point, normalised_to_u32(pixel_normal),
+                    out_radiance / f32(SAMPLES),
+                    pixel_ty,
+                    conv_rough(ray_sample.roughness),
+                );
+                pdf += ray_sample.pdf;
+            }
+        } else if RESTIR == RESTIR_OPTION_PER_SAMPLE {
+            let sample = Sample(
+                ray_sample.visible_point,
+                normalised_to_u32(ray_sample.visible_normal),
+                ray_sample.point, normalised_to_u32(ray_sample.normal),
+                ray_sample.out_radiance,
+                ray_sample.ty,
+                conv_rough(ray_sample.roughness),
+            );
+            if (sample.ty != SKY && ray_sample.valid) {
+                let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
+                R = update(sample, w, R, own_seed, false);
+                own_seed = rand_u32(own_seed);
+                let confidance = unpack_confidance(R.packed_confidance_valid).confidance;
+                R.W = safe_div(R.w, (f32(confidance) * p_hat(sam_from_res(R))));
+            } else if sample.ty == SKY {
+                R.ty = SKY;
+            }
         }
         shuffle_marcov_chain(next_sub_id);
         //lights.samples[idx] = update(sample, 1.0, lights.samples[idx], own_seed);
     }
     pdf /= f32(SAMPLES);
-    info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
+    if RESTIR != RESTIR_OPTION_NONE {
+        info[idx] = from_info(Info(camera_loc, pixel_emission, pixel_albedo));
+    }
     markov_chains[idx] = tentative_marcov_chain_state;
     textureStore(output_normal, id.xy, vec4<f32>(pixel_normal, 1.0));
     textureStore(output_albedo, id.xy, vec4<f32>(pixel_albedo, 1.0));
     textureStore(output, id.xy, vec4<f32>(max(pixel_color / f32(SAMPLES), vec3<f32>(0.0)), 1.0));
 
     // put collective samples into GI
-    if (sample.ty != SKY && sample_valid) {
-        var R = Reservoir();
-        let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
-        R = update(sample, w, R, own_seed, false);
-        own_seed = rand_u32(own_seed);
-        let confidance = unpack_confidance(R.packed_confidance_valid).confidance;
-        R.W = safe_div(R.w, (f32(confidance) * p_hat(sam_from_res(R))));
-        gi_reservoirs[idx] = R;
-    } else if sample.ty == SKY {
-        var R = Reservoir();
-        R.ty = SKY;
-        gi_reservoirs[idx] = R;
+    if RESTIR == RESTIR_OPTION_PER_PIXEL {
+        if (sample.ty != SKY && sample_valid) {
+            let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
+            R = update(sample, w, R, own_seed, false);
+            own_seed = rand_u32(own_seed);
+            let confidance = unpack_confidance(R.packed_confidance_valid).confidance;
+            R.W = safe_div(R.w, (f32(confidance) * p_hat(sam_from_res(R))));
+        } else if sample.ty == SKY {
+            R.ty = SKY;
+        }
     }
+    gi_reservoirs[idx] = R;
     //lights.samples[idx].out_radiance = out_radiance / f32(SAMPLES);
     //lights.samples[idx].W = lights.samples[idx].w / max(0.00001, (f32(unpack4xU8(lights.samples[idx].M_valid).x) * p_hat(sam_from_res(lights.samples[idx]), pixel_normal, lights.samples[idx].sample_point, pixel_albedo, -normalize(lights.samples[idx].sample_point - cam_loc))));
     //textureStore(output, id.xy, vec4<f32>(vec3((lights.samples[idx].W / 5.0)), 1.0));

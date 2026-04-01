@@ -53,7 +53,6 @@ struct Sample {
     out_radiance: vec3<f32>,
     ty: u32,
     roughness: f32,
-    pdf:f32,
     //rand: array<u32, BOUNCES>,
 }
 
@@ -123,7 +122,6 @@ fn assign_sam_to_res(reservoir: ptr<function, Reservoir>, s_new: Sample) {
     reservoir.out_radiance = s_new.out_radiance;
     reservoir.ty = s_new.ty;
     reservoir.roughness = s_new.roughness;
-    reservoir.pdf = s_new.pdf;
     var confidance_valid = unpack_confidance((*reservoir).packed_confidance_valid);
     confidance_valid.valid = 1u;
     reservoir.packed_confidance_valid = pack_confidance(confidance_valid);
@@ -138,7 +136,6 @@ fn sam_from_res(r: Reservoir) -> Sample {
         r.out_radiance,
         r.ty,
         r.roughness,
-        r.pdf,
     );
 }
 

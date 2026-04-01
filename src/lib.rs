@@ -25,6 +25,7 @@ pub mod textures;
 use crate::low_level::rc_resolver::RcResolver;
 use crate::low_level::{IntersectionHandler, RayTracingShader, RayTracingShaderDST};
 pub use data_buffer::{AdvanceOptions, BufferType, DataBuffers};
+pub use low_level::RayTracingOptions;
 
 /// Refractive indices from https://refractiveindex.info/
 pub mod refractive_indices {
@@ -236,6 +237,7 @@ impl DynamicRayTracer {
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
         overrides: &[(&str, f64)],
+        options: &dyn low_level::RayTracerOptions,
     ) -> ComputePipeline {
         let pipeline_layout = low_level::pipeline_layout(
             &self.device,
@@ -247,7 +249,7 @@ impl DynamicRayTracer {
         );
 
         let compiled = compile_shader(
-            self.shader.shader_source_without_intersection_handler(),
+            self.shader.shader_source_without_intersection_handler(options),
             &self.intersection_handler,
             &self.resolver,
         );
@@ -296,12 +298,6 @@ impl<S: RayTracingShader> RayTracer<S> {
         S::features()
     }
 
-    #[deprecated = "use Limits::or_better_values_from"]
-    pub fn combine_required_limits(base: wgpu::Limits) -> wgpu::Limits {
-        #[expect(deprecated)]
-        S::limits_or(base)
-    }
-
     pub fn required_limits() -> wgpu::Limits {
         S::limits().or_better_values_from(
             &wgpu::Limits::default().using_minimum_supported_acceleration_structure_values(),
@@ -321,6 +317,7 @@ impl<S: RayTracingShader> RayTracer<S> {
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
         overrides: &[(&str, f64)],
+        options: &dyn low_level::RayTracerOptions,
     ) -> ComputePipeline {
         let pipeline_layout = low_level::pipeline_layout(
             &self.device,
@@ -332,7 +329,7 @@ impl<S: RayTracingShader> RayTracer<S> {
         );
 
         let compiled = compile_shader(
-            S::shader_source_without_intersection_handler(),
+            S::shader_source_without_intersection_handler(options),
             &self.intersection_handler,
             &self.resolver,
         );

@@ -42,7 +42,7 @@ type RayTracer = lambent::RayTracer<path_tracing::Medium>;
 
 const SIZE: u32 = 320;
 
-const SAMPLES: usize = 1;
+const SAMPLES: usize = 8;
 
 const IS_SAMPLES: usize = 4;
 
@@ -341,6 +341,7 @@ fn main() {
         NonZeroU32::new(1).unwrap(),
         NonZeroU32::new(1).unwrap(),
         &[("SAMPLES", SAMPLES as f64)],
+        &lambent::RayTracingOptions::default(),
     );
 
     let temporal_resampling = TemporalResampling::new(&device);
