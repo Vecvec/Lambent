@@ -942,10 +942,12 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     // A final train of the markov chain with the real radiance
     //sample.out_radiance = (sample.color - sample.emission) / sample.albedo;
     let world_cache = grid_load(sample.point, sample.normal, start_dir, false);
-    // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0);
     grid_store_markov_chain(sample.point, sample.normal, start_dir, state);
+    // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     grid_add_radiance(sample.point, sample.normal, start_dir, sample.out_radiance);
+
+    // tentative_marcov_chain_state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, tentative_marcov_chain_state, 0.1);
 
     sample.color /= vmf_weight;
     sample.out_radiance /= vmf_weight;
