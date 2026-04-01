@@ -33,9 +33,8 @@ use wgpu::{
     Features, FragmentState, IndexFormat, InstanceDescriptor, Limits, Operations,
     PipelineCompilationOptions, PipelineLayoutDescriptor, PresentMode, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipelineDescriptor, RequestAdapterOptions, ShaderStages,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType,
-    TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat,
-    VertexState,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat, VertexState,
 };
 
 type RayTracer = lambent::RayTracer<path_tracing::Medium>;
@@ -392,7 +391,10 @@ fn main() {
 
     let averaging_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[Some(&averaging_pipeline_in_layout), Some(&oidn_state.staging_bgl)],
+        bind_group_layouts: &[
+            Some(&averaging_pipeline_in_layout),
+            Some(&oidn_state.staging_bgl),
+        ],
         immediate_size: 4,
     });
 
@@ -634,7 +636,10 @@ fn main() {
 
     while !window.should_close() {
         if change_light_brightness {
-            let bf_diffuse = half::bf16::from_f32(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes();
+            let bf_diffuse = half::bf16::from_f32(
+                start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS,
+            )
+            .to_ne_bytes();
             let bf_emission = half::bf16::from_f32_const(0.0).to_ne_bytes();
             queue.write_buffer(
                 &material_buf,
@@ -652,16 +657,17 @@ fn main() {
         let surface_texture = match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
             wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-            err @ wgpu::CurrentSurfaceTexture::Timeout | err @ wgpu::CurrentSurfaceTexture::Occluded => {
+            err @ wgpu::CurrentSurfaceTexture::Timeout
+            | err @ wgpu::CurrentSurfaceTexture::Occluded => {
                 println!("Recoverable error during surface obtaining {err:?}");
-                continue
-            },
+                continue;
+            }
             wgpu::CurrentSurfaceTexture::Outdated => {
                 surface_config.width = max(window.get_size().0 as u32, 1);
                 surface_config.height = max(window.get_size().1 as u32, 1);
                 surface.configure(&device, &surface_config);
                 continue;
-            },
+            }
             err => panic!("{:?}", err),
         };
         let texture = device.create_texture(&TextureDescriptor {

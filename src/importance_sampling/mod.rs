@@ -181,11 +181,10 @@ pub mod internal_layouts {
         _full_w: f32,
         _pad: [f32; 3],
     }
-    
+
     pub struct Info {
         _emission: [f32; 4],
         _albedo: [f32; 4],
         _cam_loc: [f32; 4],
     }
 }
-

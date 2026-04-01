@@ -1,10 +1,10 @@
 //! Lower level abstraction over things that are needed.
-//! 
+//!
 //! WARNING: You should not use these. They are exposed only to allow
 //! other crates to implement them. If you use these, there will be
 //! much more frequent and more subtle (and complex) breaking changes.
 
-use crate::{DynamicRayTracer, RayTracer, low_level};
+use crate::{low_level, DynamicRayTracer, RayTracer};
 use std::{any::Any, num::NonZeroU32, rc::Rc};
 use wesl::Resolver;
 use wgpu::{
@@ -88,11 +88,11 @@ impl RayTracerOptions for RayTracingOptions {
     fn samples_ref(&self) -> &NonZeroU32 {
         &self.samples
     }
-    
+
     fn t_min_ref(&self) -> &f32 {
         &self.tmin
     }
-    
+
     fn t_max_ref(&self) -> &f32 {
         &self.tmax
     }
@@ -104,7 +104,11 @@ pub const DEFAULT_T_MAX: f32 = 1000.0;
 
 impl Default for RayTracingOptions {
     fn default() -> Self {
-        Self { samples: DEFAULT_NUM_SAMPLES, tmin: DEFAULT_T_MIN, tmax: DEFAULT_T_MAX }
+        Self {
+            samples: DEFAULT_NUM_SAMPLES,
+            tmin: DEFAULT_T_MIN,
+            tmax: DEFAULT_T_MAX,
+        }
     }
 }
 
@@ -179,7 +183,8 @@ pub unsafe trait RayTracingShader: Sized + 'static {
             ..Limits::default()
         }
     }
-    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions) -> String;
+    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions)
+        -> String;
     #[cfg(debug_assertions)]
     fn label() -> &'static str;
 }
@@ -194,7 +199,10 @@ pub unsafe trait RayTracingShader: Sized + 'static {
 pub unsafe trait RayTracingShaderDST {
     fn features(&self) -> Features;
     fn limits(&self) -> Limits;
-    fn shader_source_without_intersection_handler(&self, opts: &dyn low_level::RayTracerOptions) -> String;
+    fn shader_source_without_intersection_handler(
+        &self,
+        opts: &dyn low_level::RayTracerOptions,
+    ) -> String;
     #[cfg(debug_assertions)]
     fn label(&self) -> &'static str;
     fn dyn_ray_tracer(&self, device: &Device) -> DynamicRayTracer;
@@ -211,7 +219,10 @@ unsafe impl<T: RayTracingShader> RayTracingShaderDST for T {
     fn limits(&self) -> Limits {
         T::limits()
     }
-    fn shader_source_without_intersection_handler(&self, opts: &dyn low_level::RayTracerOptions) -> String {
+    fn shader_source_without_intersection_handler(
+        &self,
+        opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
         T::shader_source_without_intersection_handler(opts)
     }
     #[cfg(debug_assertions)]

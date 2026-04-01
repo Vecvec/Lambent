@@ -37,7 +37,7 @@ pub mod internal_layouts {
         _score: f32,
         _align: u32,
     }
-    
+
     /// Matches atomic markov chain in bindings.
     #[repr(C)]
     pub struct AtomicMarkovChain {
@@ -48,7 +48,7 @@ pub mod internal_layouts {
         _score: f32,
         // align unneeded.
     }
-    
+
     #[repr(C)]
     pub struct WorldMarkovStorage {
         _secondary_hash: u32,

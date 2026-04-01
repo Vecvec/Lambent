@@ -230,49 +230,28 @@ impl DynamicRayTracer {
         self.extra_bgls = handler.additional_bind_group_layouts(&self.device);
     }
 
-    pub fn create_pipeline(
+    pub fn create_pipeline<Opts: low_level::RayTracerOptions>(
         &self,
         blas_count: NonZeroU32,
         diffuse_count: NonZeroU32,
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
-        options: &dyn low_level::RayTracerOptions,
+        options: &Opts,
     ) -> ComputePipeline {
-        let pipeline_layout = low_level::pipeline_layout(
-            &self.device,
+        create_pipeline(
             blas_count,
             diffuse_count,
             emission_count,
             attribute_count,
+            options,
+            self.shader
+                .shader_source_without_intersection_handler(options),
+            &self.device,
             &self.extra_bgls,
-        );
-
-        let compiled = compile_shader(
-            self.shader.shader_source_without_intersection_handler(options),
             &self.intersection_handler,
+            None,
             &self.resolver,
-        );
-
-        let shader = self.device.create_shader_module(ShaderModuleDescriptor {
-            label: None,
-            source: ShaderSource::Wgsl(Cow::Owned(compiled)),
-        });
-        self.device
-            .create_compute_pipeline(&ComputePipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("rt_main"),
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[
-                        ("SAMPLES", options.samples().get() as f64),
-                        ("T_MIN", options.t_min() as f64),
-                        ("T_MAX", options.t_max() as f64),
-                    ],
-                    zero_initialize_workgroup_memory: true,
-                },
-                cache: None,
-            })
+        )
     }
 }
 
@@ -313,50 +292,27 @@ impl<S: RayTracingShader> RayTracer<S> {
         self.resolver = handler.resolver().map(|h| RcResolver(h));
     }
 
-    pub fn create_pipeline(
+    pub fn create_pipeline<Opts: low_level::RayTracerOptions>(
         &self,
         blas_count: NonZeroU32,
         diffuse_count: NonZeroU32,
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
-        options: &dyn low_level::RayTracerOptions,
+        options: &Opts,
     ) -> ComputePipeline {
-        let pipeline_layout = low_level::pipeline_layout(
-            &self.device,
+        create_pipeline(
             blas_count,
             diffuse_count,
             emission_count,
             attribute_count,
-            &self.extra_bgls,
-        );
-
-        let compiled = compile_shader(
+            options,
             S::shader_source_without_intersection_handler(options),
+            &self.device,
+            &self.extra_bgls,
             &self.intersection_handler,
+            get_label::<S>(),
             &self.resolver,
-        );
-
-        let shader = self.device.create_shader_module(ShaderModuleDescriptor {
-            label: get_label::<S>(),
-            source: ShaderSource::Wgsl(Cow::Owned(compiled)),
-        });
-
-        self.device
-            .create_compute_pipeline(&ComputePipelineDescriptor {
-                label: get_label::<S>(),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("rt_main"),
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[
-                        ("SAMPLES", options.samples().get() as f64),
-                        ("T_MIN", options.t_min() as f64),
-                        ("T_MAX", options.t_max() as f64),
-                    ],
-                    zero_initialize_workgroup_memory: true,
-                },
-                cache: None,
-            })
+        )
     }
 
     pub fn dynamic(self) -> DynamicRayTracer {
@@ -368,6 +324,52 @@ impl<S: RayTracingShader> RayTracer<S> {
             resolver: self.resolver,
         }
     }
+}
+
+fn create_pipeline<Opts: low_level::RayTracerOptions>(
+    blas_count: NonZeroU32,
+    diffuse_count: NonZeroU32,
+    emission_count: NonZeroU32,
+    attribute_count: NonZeroU32,
+    options: &Opts,
+    src: String,
+    device: &Device,
+    extra_bgls: &[BindGroupLayout],
+    intersection_handler: &String,
+    label: Option<&str>,
+    resolver: &Option<RcResolver>,
+) -> ComputePipeline {
+    let pipeline_layout = low_level::pipeline_layout(
+        &device,
+        blas_count,
+        diffuse_count,
+        emission_count,
+        attribute_count,
+        &extra_bgls,
+    );
+
+    let compiled = compile_shader(src, &intersection_handler, &resolver);
+
+    let shader = device.create_shader_module(ShaderModuleDescriptor {
+        label,
+        source: ShaderSource::Wgsl(Cow::Owned(compiled)),
+    });
+
+    device.create_compute_pipeline(&ComputePipelineDescriptor {
+        label,
+        layout: Some(&pipeline_layout),
+        module: &shader,
+        entry_point: Some("rt_main"),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &[
+                ("SAMPLES", options.samples().get() as f64),
+                ("T_MIN", options.t_min() as f64),
+                ("T_MAX", options.t_max() as f64),
+            ],
+            zero_initialize_workgroup_memory: true,
+        },
+        cache: None,
+    })
 }
 
 fn compile_shader(

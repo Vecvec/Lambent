@@ -13,7 +13,12 @@ pub struct PathTracerOpts {
 
 impl Default for PathTracerOpts {
     fn default() -> Self {
-        Self { samples: low_level::DEFAULT_NUM_SAMPLES, tmin: low_level::DEFAULT_T_MIN, tmax: low_level::DEFAULT_T_MAX, restir_temporal: Default::default() }
+        Self {
+            samples: low_level::DEFAULT_NUM_SAMPLES,
+            tmin: low_level::DEFAULT_T_MIN,
+            tmax: low_level::DEFAULT_T_MAX,
+            restir_temporal: Default::default(),
+        }
     }
 }
 
@@ -40,11 +45,11 @@ impl low_level::RayTracerOptions for PathTracerOpts {
             &()
         }
     }
-    
+
     fn t_min_ref(&self) -> &f32 {
         &self.tmin
     }
-    
+
     fn t_max_ref(&self) -> &f32 {
         &self.tmax
     }
@@ -68,8 +73,14 @@ unsafe impl RayTracingShader for High {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions) -> String {
-        let ray_tracing_processor = map_handler(low_level::RayTracerOptions::get(opts, "restir_temporal").downcast_ref::<RestirTemporalMode>().map_or_else(RestirTemporalMode::default, |v| *v));
+    fn shader_source_without_intersection_handler(
+        opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
+        let ray_tracing_processor = map_handler(
+            low_level::RayTracerOptions::get(opts, "restir_temporal")
+                .downcast_ref::<RestirTemporalMode>()
+                .map_or_else(RestirTemporalMode::default, |v| *v),
+        );
 
         include_wesl!("high_path_tracing").to_string() + ray_tracing_processor
     }
@@ -90,8 +101,14 @@ unsafe impl RayTracingShader for Medium {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions) -> String {
-        let ray_tracing_processor = map_handler(low_level::RayTracerOptions::get(opts, "restir_temporal").downcast_ref::<RestirTemporalMode>().map_or_else(RestirTemporalMode::default, |v| *v));
+    fn shader_source_without_intersection_handler(
+        opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
+        let ray_tracing_processor = map_handler(
+            low_level::RayTracerOptions::get(opts, "restir_temporal")
+                .downcast_ref::<RestirTemporalMode>()
+                .map_or_else(RestirTemporalMode::default, |v| *v),
+        );
 
         include_wesl!("medium_path_tracing").to_string() + ray_tracing_processor
     }
@@ -112,8 +129,14 @@ unsafe impl RayTracingShader for Low {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(opts: &dyn low_level::RayTracerOptions) -> String {
-        let ray_tracing_processor = map_handler(low_level::RayTracerOptions::get(opts, "restir_temporal").downcast_ref::<RestirTemporalMode>().map_or_else(RestirTemporalMode::default, |v| *v));
+    fn shader_source_without_intersection_handler(
+        opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
+        let ray_tracing_processor = map_handler(
+            low_level::RayTracerOptions::get(opts, "restir_temporal")
+                .downcast_ref::<RestirTemporalMode>()
+                .map_or_else(RestirTemporalMode::default, |v| *v),
+        );
 
         include_wesl!("low_path_tracing").to_string() + ray_tracing_processor
     }

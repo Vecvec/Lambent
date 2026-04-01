@@ -19,7 +19,16 @@ use std::time::Instant;
 use std::{iter, mem, panic};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    AccelerationStructureFlags, AccelerationStructureGeometryFlags, AccelerationStructureUpdateMode, Adapter, Backends, BindGroupDescriptor, BindGroupEntry, BindingResource, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors, BlasTriangleGeometry, BlasTriangleGeometrySizeDescriptor, BufferAddress, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, CurrentSurfaceTexture, DeviceDescriptor, ExperimentalFeatures, Extent3d, Features, IndexFormat, Instance, InstanceDescriptor, Origin3d, PresentMode, Queue, RequestDeviceError, Surface, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat
+    AccelerationStructureFlags, AccelerationStructureGeometryFlags,
+    AccelerationStructureUpdateMode, Adapter, Backends, BindGroupDescriptor, BindGroupEntry,
+    BindingResource, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors,
+    BlasTriangleGeometry, BlasTriangleGeometrySizeDescriptor, BufferAddress, BufferUsages,
+    CommandEncoderDescriptor, ComputePassDescriptor, CreateBlasDescriptor, CreateTlasDescriptor,
+    CurrentSurfaceTexture, DeviceDescriptor, ExperimentalFeatures, Extent3d, Features, IndexFormat,
+    Instance, InstanceDescriptor, Origin3d, PresentMode, Queue, RequestDeviceError, Surface,
+    TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    TlasInstance, VertexFormat,
 };
 
 const SIZE: (u32, u32) = (1280, 720);
@@ -203,18 +212,20 @@ fn exe_shader(
     let surface = instance.create_surface(window.render_context()).unwrap();
     let adapters = block_on(instance.enumerate_adapters(Backends::default()));
     for adapter in &adapters {
-        match panic::catch_unwind(panic::AssertUnwindSafe(|| run_shader(
-            shader,
-            adapter,
-            &surface,
-            vertices,
-            indices,
-            materials,
-            material_indices,
-            glfw,
-            window,
-            run_is,
-        ))) {
+        match panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            run_shader(
+                shader,
+                adapter,
+                &surface,
+                vertices,
+                indices,
+                materials,
+                material_indices,
+                glfw,
+                window,
+                run_is,
+            )
+        })) {
             Ok(res) => match res {
                 Ok(_) => {}
                 Err(ExcErr::Other(string)) => {
@@ -554,20 +565,20 @@ fn run_shader(
         let surface_texture = match surface.get_current_texture() {
             CurrentSurfaceTexture::Success(tex) | CurrentSurfaceTexture::Suboptimal(tex) => tex,
             CurrentSurfaceTexture::Outdated => {
-                    surface_config.width = max(window.get_size().0 as u32, 1);
-                    surface_config.height = max(window.get_size().1 as u32, 1);
-                    surface.configure(&device, &surface_config);
+                surface_config.width = max(window.get_size().0 as u32, 1);
+                surface_config.height = max(window.get_size().1 as u32, 1);
+                surface.configure(&device, &surface_config);
 
-                    buffers = DataBuffers::new(
-                        &device,
-                        window.get_size().0 as u32,
-                        window.get_size().1 as u32,
-                        1_000,
-                        BufferType::all(),
-                    );
-                    continue;
-                }
-                _ => return Err(ExcErr::Other(format!("Failed to get surface"))),
+                buffers = DataBuffers::new(
+                    &device,
+                    window.get_size().0 as u32,
+                    window.get_size().1 as u32,
+                    1_000,
+                    BufferType::all(),
+                );
+                continue;
+            }
+            _ => return Err(ExcErr::Other(format!("Failed to get surface"))),
         };
         let output_tex = device.create_texture(&TextureDescriptor {
             label: None,

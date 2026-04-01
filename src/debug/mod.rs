@@ -10,7 +10,9 @@ unsafe impl RayTracingShader for FrontFace {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(_opts: &dyn low_level::RayTracerOptions) -> String {
+    fn shader_source_without_intersection_handler(
+        _opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
         include_wesl!("front_face").to_string()
     }
     #[cfg(debug_assertions)]
@@ -25,7 +27,9 @@ unsafe impl RayTracingShader for Reflectance {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(_opts: &dyn low_level::RayTracerOptions) -> String {
+    fn shader_source_without_intersection_handler(
+        _opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
         include_wesl!("reflectance").to_string()
     }
     #[cfg(debug_assertions)]
@@ -40,7 +44,9 @@ unsafe impl RayTracingShader for Tangent {
     fn new() -> Self {
         Self
     }
-    fn shader_source_without_intersection_handler(_opts: &dyn low_level::RayTracerOptions) -> String {
+    fn shader_source_without_intersection_handler(
+        _opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
         include_wesl!("tangent").to_string()
     }
     #[cfg(debug_assertions)]
