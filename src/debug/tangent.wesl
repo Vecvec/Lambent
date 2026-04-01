@@ -15,7 +15,6 @@ import package::bindings::{
     unpack_2xu16,
     near_zero,
     // Overrides
-    SAMPLES,
 };
 
 @if(!vertex_return)
@@ -24,6 +23,8 @@ import package::bindings::{ get_vertices, };
 enable wgpu_ray_query;
 @if(vertex_return)
 enable wgpu_ray_vertex_return;
+
+override SAMPLES = 5u;
 
 struct Ray {
     direction: vec3f,
@@ -35,6 +36,7 @@ var<immediate> seed_offset:u32;
 @workgroup_size(64, 1, 1)
 @compute
 fn rt_main(@builtin(global_invocation_id) id: vec3<u32>) {
+    _ = SAMPLES;
     let ray_sample = rt_sample(id.xy);
     textureStore(output, id.xy, vec4<f32>(ray_sample.color, 1.0));
     textureStore(output_normal, id.xy, vec4<f32>(ray_sample.normal, 1.0));
