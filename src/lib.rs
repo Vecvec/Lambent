@@ -236,7 +236,6 @@ impl DynamicRayTracer {
         diffuse_count: NonZeroU32,
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
-        overrides: &[(&str, f64)],
         options: &dyn low_level::RayTracerOptions,
     ) -> ComputePipeline {
         let pipeline_layout = low_level::pipeline_layout(
@@ -265,7 +264,11 @@ impl DynamicRayTracer {
                 module: &shader,
                 entry_point: Some("rt_main"),
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: overrides,
+                    constants: &[
+                        ("SAMPLES", options.samples().get() as f64),
+                        ("T_MIN", options.t_min() as f64),
+                        ("T_MAX", options.t_max() as f64),
+                    ],
                     zero_initialize_workgroup_memory: true,
                 },
                 cache: None,
@@ -316,7 +319,6 @@ impl<S: RayTracingShader> RayTracer<S> {
         diffuse_count: NonZeroU32,
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
-        overrides: &[(&str, f64)],
         options: &dyn low_level::RayTracerOptions,
     ) -> ComputePipeline {
         let pipeline_layout = low_level::pipeline_layout(
@@ -346,7 +348,11 @@ impl<S: RayTracingShader> RayTracer<S> {
                 module: &shader,
                 entry_point: Some("rt_main"),
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: overrides,
+                    constants: &[
+                        ("SAMPLES", options.samples().get() as f64),
+                        ("T_MIN", options.t_min() as f64),
+                        ("T_MAX", options.t_max() as f64),
+                    ],
                     zero_initialize_workgroup_memory: true,
                 },
                 cache: None,

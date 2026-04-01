@@ -44,9 +44,21 @@ pub trait RayTracerOptions {
         *self.samples_ref()
     }
 
+    fn t_min(&self) -> f32 {
+        *self.t_min_ref()
+    }
+
+    fn t_max(&self) -> f32 {
+        *self.t_max_ref()
+    }
+
     fn get<'a>(&'a self, name: &'static str) -> &'a dyn Any {
         if name == "sample" {
             self.samples_ref()
+        } else if name == "t_min" {
+            self.t_min_ref()
+        } else if name == "t_max" {
+            self.t_max_ref()
         } else {
             self.get_non_sample(name)
         }
@@ -56,10 +68,16 @@ pub trait RayTracerOptions {
     fn get_non_sample<'a>(&'a self, name: &'static str) -> &'a dyn Any;
     #[doc(hidden)]
     fn samples_ref(&self) -> &NonZeroU32;
+    #[doc(hidden)]
+    fn t_min_ref(&self) -> &f32;
+    #[doc(hidden)]
+    fn t_max_ref(&self) -> &f32;
 }
 
 pub struct RayTracingOptions {
     pub samples: NonZeroU32,
+    pub tmin: f32,
+    pub tmax: f32,
 }
 
 impl RayTracerOptions for RayTracingOptions {
@@ -70,13 +88,23 @@ impl RayTracerOptions for RayTracingOptions {
     fn samples_ref(&self) -> &NonZeroU32 {
         &self.samples
     }
+    
+    fn t_min_ref(&self) -> &f32 {
+        &self.tmin
+    }
+    
+    fn t_max_ref(&self) -> &f32 {
+        &self.tmax
+    }
 }
 
 pub const DEFAULT_NUM_SAMPLES: NonZeroU32 = NonZeroU32::new(4).unwrap();
+pub const DEFAULT_T_MIN: f32 = 0.0001;
+pub const DEFAULT_T_MAX: f32 = 1000.0;
 
 impl Default for RayTracingOptions {
     fn default() -> Self {
-        Self { samples: DEFAULT_NUM_SAMPLES }
+        Self { samples: DEFAULT_NUM_SAMPLES, tmin: DEFAULT_T_MIN, tmax: DEFAULT_T_MAX }
     }
 }
 

@@ -379,12 +379,6 @@ fn run_shader(
         NonZeroU32::new(2).unwrap(),
         NonZeroU32::new(2).unwrap(),
         NonZeroU32::new(1).unwrap(),
-        &[
-            ("SAMPLES", samples as f64),
-            // this is a test, these are just here to check all shaders contain them
-            ("T_MIN", 0.01),
-            ("T_MAX", 10.0),
-        ],
         &crate::RayTracingOptions::default(),
     );
 

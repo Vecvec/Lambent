@@ -6,12 +6,14 @@ use crate::low_level::{self, RayTracingShader};
 
 pub struct PathTracerOpts {
     pub samples: NonZeroU32,
+    pub tmin: f32,
+    pub tmax: f32,
     pub restir_temporal: RestirTemporalMode,
 }
 
 impl Default for PathTracerOpts {
     fn default() -> Self {
-        Self { samples: low_level::DEFAULT_NUM_SAMPLES, restir_temporal: Default::default() }
+        Self { samples: low_level::DEFAULT_NUM_SAMPLES, tmin: low_level::DEFAULT_T_MIN, tmax: low_level::DEFAULT_T_MAX, restir_temporal: Default::default() }
     }
 }
 
@@ -37,6 +39,14 @@ impl low_level::RayTracerOptions for PathTracerOpts {
         } else {
             &()
         }
+    }
+    
+    fn t_min_ref(&self) -> &f32 {
+        &self.tmin
+    }
+    
+    fn t_max_ref(&self) -> &f32 {
+        &self.tmax
     }
 }
 

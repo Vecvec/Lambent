@@ -1046,8 +1046,8 @@ fn x_divided_by_exp_minus_one(x:f32) -> f32 {
     return x / y;
 }
 
-override T_MIN:f32 = 0.0001;
-override T_MAX:f32 = 1000.0;
+override T_MIN:f32;
+override T_MAX:f32;
 
 fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
     var rq: ray_query_maybe_vertex_return;

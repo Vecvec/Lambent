@@ -42,7 +42,7 @@ type RayTracer = lambent::RayTracer<path_tracing::Medium>;
 
 const SIZE: u32 = 320;
 
-const SAMPLES: usize = 8;
+const SAMPLES: NonZeroU32 = NonZeroU32::new(8).unwrap();
 
 const IS_SAMPLES: usize = 4;
 
@@ -82,7 +82,7 @@ fn main() {
 
     for var in std::env::vars() {
         if var.0 == "samples" {
-            let override_samples = var.1.parse::<usize>();
+            let override_samples = var.1.parse::<NonZeroU32>();
             match override_samples {
                 Ok(sam) => {
                     samples = sam;
@@ -274,7 +274,7 @@ fn main() {
     .unwrap();
     println!(
         "targeting {} samples with {} execution(s)",
-        samples * target_exe_num,
+        samples.get() as usize * target_exe_num,
         target_exe_num
     );
 
@@ -340,8 +340,10 @@ fn main() {
         NonZeroU32::new(4).unwrap(),
         NonZeroU32::new(1).unwrap(),
         NonZeroU32::new(1).unwrap(),
-        &[("SAMPLES", SAMPLES as f64)],
-        &lambent::RayTracingOptions::default(),
+        &lambent::RayTracingOptions {
+            samples,
+            ..Default::default()
+        },
     );
 
     let temporal_resampling = TemporalResampling::new(&device);
