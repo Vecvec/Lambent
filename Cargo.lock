@@ -304,6 +304,7 @@ dependencies = [
  "env_logger",
  "futures",
  "glfw",
+ "half",
  "image",
  "lambent",
  "oidn",

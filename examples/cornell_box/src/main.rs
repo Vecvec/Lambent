@@ -632,10 +632,12 @@ fn main() {
 
     while !window.should_close() {
         if change_light_brightness {
+            let bf_diffuse = half::bf16::from_f32(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes();
+            let bf_emission = half::bf16::from_f32_const(0.0).to_ne_bytes();
             queue.write_buffer(
                 &material_buf,
                 (size_of::<Material>() * 3) as u64 + (size_of::<u32>() * 6) as u64,
-                &(start.elapsed().as_secs_f32().cos().max(0.0) * POINT_BRIGHTNESS).to_ne_bytes(),
+                &bytemuck::cast_slice(&[bf_diffuse, bf_emission]),
             );
         }
         let percent_done =

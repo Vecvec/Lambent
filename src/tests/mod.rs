@@ -19,16 +19,7 @@ use std::time::Instant;
 use std::{iter, mem};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    AccelerationStructureFlags, AccelerationStructureGeometryFlags,
-    AccelerationStructureUpdateMode, Adapter, Backends, BindGroupDescriptor, BindGroupEntry,
-    BindingResource, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors,
-    BlasTriangleGeometry, BlasTriangleGeometrySizeDescriptor, BufferAddress, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, CreateBlasDescriptor, CreateTlasDescriptor,
-    DeviceDescriptor, ExperimentalFeatures, Extent3d, Features, IndexFormat, Instance,
-    InstanceDescriptor, Origin3d, PresentMode, Queue, RequestDeviceError, Surface, SurfaceError,
-    TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension,
-    TlasInstance, VertexFormat,
+    AccelerationStructureFlags, AccelerationStructureGeometryFlags, AccelerationStructureUpdateMode, Adapter, Backends, BindGroupDescriptor, BindGroupEntry, BindingResource, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors, BlasTriangleGeometry, BlasTriangleGeometrySizeDescriptor, BufferAddress, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, CurrentSurfaceTexture, DeviceDescriptor, ExperimentalFeatures, Extent3d, Features, IndexFormat, Instance, InstanceDescriptor, Origin3d, PresentMode, Queue, RequestDeviceError, Surface, SurfaceError, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat
 };
 
 const SIZE: (u32, u32) = (1280, 720);
@@ -208,7 +199,7 @@ fn exe_shader(
 ) {
     println!();
     let mut skipped = Vec::new();
-    let instance = Instance::new(&InstanceDescriptor::default());
+    let instance = Instance::new(InstanceDescriptor::new_without_display_handle());
     let surface = instance.create_surface(window.render_context()).unwrap();
     let adapters = block_on(instance.enumerate_adapters(Backends::default()));
     for adapter in &adapters {
@@ -384,6 +375,7 @@ fn run_shader(
             ("T_MIN", 0.01),
             ("T_MAX", 10.0),
         ],
+        &crate::RayTracingOptions::default(),
     );
 
     #[cfg(feature = "wip-features")]
@@ -556,9 +548,8 @@ fn run_shader(
             device.create_buffer_init(&cam.buffer_descriptor(BufferUsages::empty()));
         glfw.poll_events();
         let surface_texture = match surface.get_current_texture() {
-            Ok(tex) => tex,
-            Err(err) => match err {
-                SurfaceError::Outdated | SurfaceError::Lost => {
+            CurrentSurfaceTexture::Success(tex) | CurrentSurfaceTexture::Suboptimal(tex) => tex,
+            CurrentSurfaceTexture::Outdated => {
                     surface_config.width = max(window.get_size().0 as u32, 1);
                     surface_config.height = max(window.get_size().1 as u32, 1);
                     surface.configure(&device, &surface_config);
@@ -572,8 +563,7 @@ fn run_shader(
                     );
                     continue;
                 }
-                _ => return Err(ExcErr::Other(format!("Failed to get surface: {err}"))),
-            },
+                _ => return Err(ExcErr::Other(format!("Failed to get surface"))),
         };
         let output_tex = device.create_texture(&TextureDescriptor {
             label: None,
