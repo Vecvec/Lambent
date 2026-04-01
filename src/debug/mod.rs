@@ -15,7 +15,7 @@ unsafe impl RayTracingShader for FrontFace {
     }
     #[cfg(debug_assertions)]
     fn label() -> &'static str {
-        "Debugging shader"
+        "front_face debugging shader"
     }
 }
 
@@ -30,7 +30,7 @@ unsafe impl RayTracingShader for Reflectance {
     }
     #[cfg(debug_assertions)]
     fn label() -> &'static str {
-        "Debugging shader"
+        "reflectance debugging shader"
     }
 }
 
@@ -45,6 +45,6 @@ unsafe impl RayTracingShader for Tangent {
     }
     #[cfg(debug_assertions)]
     fn label() -> &'static str {
-        "Debugging shader"
+        "tangent debugging shader"
     }
 }

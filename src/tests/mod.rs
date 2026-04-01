@@ -16,7 +16,7 @@ use log::LevelFilter;
 use std::cmp::max;
 use std::num::NonZeroU32;
 use std::time::Instant;
-use std::{iter, mem};
+use std::{iter, mem, panic};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags, AccelerationStructureUpdateMode, Adapter, Backends, BindGroupDescriptor, BindGroupEntry, BindingResource, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors, BlasTriangleGeometry, BlasTriangleGeometrySizeDescriptor, BufferAddress, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, CurrentSurfaceTexture, DeviceDescriptor, ExperimentalFeatures, Extent3d, Features, IndexFormat, Instance, InstanceDescriptor, Origin3d, PresentMode, Queue, RequestDeviceError, Surface, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension, TlasInstance, VertexFormat
@@ -203,7 +203,7 @@ fn exe_shader(
     let surface = instance.create_surface(window.render_context()).unwrap();
     let adapters = block_on(instance.enumerate_adapters(Backends::default()));
     for adapter in &adapters {
-        match run_shader(
+        match panic::catch_unwind(panic::AssertUnwindSafe(|| run_shader(
             shader,
             adapter,
             &surface,
@@ -214,23 +214,33 @@ fn exe_shader(
             glfw,
             window,
             run_is,
-        ) {
-            Ok(_) => {}
-            Err(ExcErr::Other(string)) => {
+        ))) {
+            Ok(res) => match res {
+                Ok(_) => {}
+                Err(ExcErr::Other(string)) => {
+                    log::error!(
+                        "Error on {}:\n    {string}, {:?}",
+                        adapter.get_info().name,
+                        adapter.get_info().backend
+                    );
+                }
+                Err(ExcErr::Device(err)) => skipped.push((
+                    format!(
+                        "{} ({:?})",
+                        adapter.get_info().name,
+                        adapter.get_info().backend
+                    ),
+                    err,
+                )),
+            },
+            Err(_) => {
                 log::error!(
-                    "Error on {}:\n    {string}, {:?}",
+                    "Panic on {}: with shader {}, {:?}",
                     adapter.get_info().name,
+                    shader.label(),
                     adapter.get_info().backend
-                );
+                )
             }
-            Err(ExcErr::Device(err)) => skipped.push((
-                format!(
-                    "{} ({:?})",
-                    adapter.get_info().name,
-                    adapter.get_info().backend
-                ),
-                err,
-            )),
         }
     }
     let mut string = String::new();
