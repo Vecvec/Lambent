@@ -14,6 +14,8 @@ import package::bindings::{
     // functions
     unpack_2xu16,
     near_zero,
+    // Overrides
+    SAMPLES,
 };
 
 @if(!vertex_return)
