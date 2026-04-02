@@ -80,14 +80,17 @@ fn main() {
         );
     }
 
+    
     // build ReSTIR GI style processor
     // TODO: we may want to patially compile this if we do ray traced validation
-    standard_compiler(true, true).build_artifact(
-        &"package::importance_sampling::spatial_resampling"
+    for (apply_img, apply_pg) in [(true, true), (true, false), (false, true), (false, false)] {
+        standard_compiler(true, true).set_feature("apply_img", Feature::from(apply_img)).set_feature("apply_pg", Feature::from(apply_pg)).build_artifact(
+            &"package::importance_sampling::spatial_resampling"
             .parse()
             .unwrap(),
-        "spatial_resampling",
-    );
+            &format!("spatial_resampling_{apply_img}_{apply_pg}"),
+        );
+    }
     standard_compiler(true, true).build_artifact(
         &"package::importance_sampling::temporal_resampling"
             .parse()

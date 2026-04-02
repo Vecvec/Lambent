@@ -37,11 +37,16 @@ impl SpatialResampling {
         // features required to interact
         Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
     }
-    pub fn create_shader() -> Shader {
+    pub fn create_shader(options: ResamplingOptions) -> Shader {
         use wesl::include_wesl;
 
         Shader {
-            base: include_wesl!("spatial_resampling").to_string(),
+            base: match (options.apply_to_image, options.update_path_guiding) {
+                (true, true) => include_wesl!("spatial_resampling_true_true"),
+                (true, false) => include_wesl!("spatial_resampling_true_false"),
+                (false, true) => include_wesl!("spatial_resampling_false_true"),
+                (false, false) => include_wesl!("spatial_resampling_false_false"),
+            }.to_string(),
             #[cfg(debug_assertions)]
             label: "Spatial Resampler",
         }
@@ -54,6 +59,7 @@ impl SpatialResampling {
         emission_count: NonZeroU32,
         attribute_count: NonZeroU32,
         overrides: &[(&str, f64)],
+        options: ResamplingOptions,
     ) -> ComputePipeline {
         use wgpu::ComputePipelineDescriptor;
 
@@ -70,7 +76,7 @@ impl SpatialResampling {
 
         let shader = self
             .device
-            .create_shader_module(Self::create_shader().descriptor());
+            .create_shader_module(Self::create_shader(options).descriptor());
 
         self.device
             .create_compute_pipeline(&ComputePipelineDescriptor {
@@ -161,6 +167,21 @@ impl TemporalResampling {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             })
+    }
+}
+
+pub struct ResamplingOptions {
+    /// Whether the resampling should overwrite
+    /// the image with its values
+    pub apply_to_image: bool,
+    /// Whether the resampling should improve
+    /// the path guiding with its values
+    pub update_path_guiding: bool,
+}
+
+impl Default for ResamplingOptions {
+    fn default() -> Self {
+        Self { apply_to_image: true, update_path_guiding: false }
     }
 }
 

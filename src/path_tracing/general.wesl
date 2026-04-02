@@ -1,5 +1,5 @@
 import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx };
-import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
+import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -428,8 +428,6 @@ fn marcov_chain_valid(state: MarcovChainState) -> bool {
     return state.weight_sum > 0.0;
 }
 
-// Moved the number in the paper outside to a constant.
-const MARCOV_CHAIN_SAMPLE_CLAMP = 1024;
 const FLOAT_MAX = 3.40282347E+38;
 
 // x0 is never used so we don't include it.
@@ -460,42 +458,6 @@ const FLOAT_MAX = 3.40282347E+38;
 //        current_marcov_chain_state = tentative_marcov_chain_state;
 //    }
 //}
-
-fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat: f32, seed: u32, not_vmf: bool, old_state: MarcovChainState, confidence: f32) -> MarcovChainState {
-    var state = old_state;
-    if not_vmf {
-        // While the origional paper used this, the newer one instead resets if it couldn't find the light
-        state = MarcovChainState();
-    }
-    let score = p_hat;
-    let rand = rand_f32(seed);
-    /*if near_zero(sum_mc) {
-        tentative_marcov_chain_state.num_samples = min(tentative_marcov_chain_state.num_samples + 1, MARCOV_CHAIN_SAMPLE_CLAMP);
-        let alpha = max(1.0 / f32(tentative_marcov_chain_state.num_samples), 0.1);
-        tentative_marcov_chain_state.weight_sum = score;
-        tentative_marcov_chain_state.light_source = score * x2;
-        tentative_marcov_chain_state.mean_cosine = score;
-    } else */if ((rand * sum_mc) < (p_hat * f32(NUM_RESAMPLES))) {
-        if near_zero(length(get_light_dir(state, x1))) {
-            return state;
-        }
-        state.num_samples = min(state.num_samples + 1, MARCOV_CHAIN_SAMPLE_CLAMP);
-        let alpha = select(max(1.0 / f32(state.num_samples), 0.01) * confidence, 1.0, state.num_samples == 1);
-        state.weight_sum = mix(state.weight_sum, score, alpha);
-        state.light_source = mix(state.light_source, score * x2, alpha);
-        let mean = normalize(get_light_dir(state, x1));
-        //state.light_source = mix(state.light_source, x2, alpha);
-        state.mean_cosine = mix(state.mean_cosine, score * dot(normalize(x2 - x1), mean), alpha);
-        //state.mean_cosine = state.weight_sum * 0.9;
-    }
-    return state;
-}
-
-/// Returns an unnormalized vector from the `current` to the light
-fn get_light_dir(state: MarcovChainState, current: vec3<f32>) -> vec3<f32> {
-    return safe_div_vec3(state.light_source, state.weight_sum) - current;
-    //return state.light_source - current;
-}
 
 var<private> camera_loc: vec3<f32>;
 
@@ -677,9 +639,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out + radiance_reflected);
                 let weight = length(radiance_out + (radiance_reflected));
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0, sum_mc);
                     grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1));
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc);
                     self_seed++;
                 }
             }
@@ -928,9 +890,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out);
                 let weight = length(radiance_out);
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0, sum_mc);
                     grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1));
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc);
                     self_seed++;
                 }
             }
@@ -942,7 +904,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     // A final train of the markov chain with the real radiance
     //sample.out_radiance = (sample.color - sample.emission) / sample.albedo;
     let world_cache = grid_load(sample.point, sample.normal, start_dir, false);
-    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0);
+    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0, sum_mc);
     grid_store_markov_chain(sample.point, sample.normal, start_dir, state);
     // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     grid_add_radiance(sample.point, sample.normal, start_dir, sample.out_radiance);

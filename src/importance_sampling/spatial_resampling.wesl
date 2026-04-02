@@ -183,14 +183,21 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
         //textureStore(output, id.xy, vec4<f32>(pix_is, 1.0));
     }
     
-    let pix_is = fma((Rs.out_radiance * Rs.W), to_info(info[idx]).albedo, to_info(info[idx]).emission);
+    @if(apply_img) { 
+        let pix_is = fma((Rs.out_radiance * Rs.W), to_info(info[idx]).albedo, to_info(info[idx]).emission);
+        textureStore(output, id.xy, vec4<f32>((pix_is), 1.0));
+    }
+
+    @if(apply_pg) {
+        
+    }
+
     //let pix_is = fma(safe_div_vec3(out_radiance, f32(sample_is_samples)), to_info(info[idx]).albedo, to_info(info[idx]).emission);
-    textureStore(output, id.xy, vec4<f32>(vec3(f32(sample_is_samples == 0)), 1.0));
-    let diff = ((Rs.w) - (Z_times_p_hat)) / 50.0;
-    textureStore(output, id.xy, vec4<f32>(vec3(max(diff, 0.0), max(-diff, 0.0), 0.0), 1.0));
-    textureStore(output, id.xy, vec4<f32>(vec3(Rs.W / 1.0), 1.0));
-    textureStore(output, id.xy, vec4<f32>(vec3(f32(unpack_confidance(Rs.packed_confidance_valid).confidance) / 255.0), 1.0));
-    textureStore(output, id.xy, vec4<f32>((pix_is), 1.0));
+    // textureStore(output, id.xy, vec4<f32>(vec3(f32(sample_is_samples == 0)), 1.0));
+    // let diff = ((Rs.w) - (Z_times_p_hat)) / 50.0;
+    // textureStore(output, id.xy, vec4<f32>(vec3(max(diff, 0.0), max(-diff, 0.0), 0.0), 1.0));
+    // textureStore(output, id.xy, vec4<f32>(vec3(Rs.W / 1.0), 1.0));
+    // textureStore(output, id.xy, vec4<f32>(vec3(f32(unpack_confidance(Rs.packed_confidance_valid).confidance) / 255.0), 1.0));
 }
 
 var<immediate> seed_offset:u32;

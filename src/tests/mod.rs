@@ -395,7 +395,7 @@ fn run_shader(
     );
 
     #[cfg(feature = "wip-features")]
-    let is_shader = SpatialResampling::create_shader();
+    let is_shader = SpatialResampling::create_shader(Default::default());
     #[cfg(feature = "wip-features")]
     let is_shader = device.create_shader_module(is_shader.descriptor());
     #[cfg(feature = "wip-features")]
