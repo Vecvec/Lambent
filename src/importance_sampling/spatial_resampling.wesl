@@ -1,4 +1,4 @@
-import super::shared::{ rand_u32, Sample, u32_to_normalised, safe_div, len_sqrd, unpack_confidance, p_hat, sam_from_res, merge, to_info, DIFFUSE, METALLIC, TRANSPARENT, SKY };
+import super::shared::{ rand_u32, Sample, u32_to_normalised, safe_div, len_sqrd, unpack_confidance, p_hat, sam_from_res, merge, to_info, get_light_dir, update_marcov_state, grid_load, grid_store_markov_chain, DIFFUSE, METALLIC, TRANSPARENT, SKY };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -182,14 +182,22 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
         //let pix_is = fma(Rs.out_radiance * Rs.W, to_info(info[idx]).albedo, to_info(info[idx]).emission);
         //textureStore(output, id.xy, vec4<f32>(pix_is, 1.0));
     }
+
+    let pix_is = fma((Rs.out_radiance * Rs.W), to_info(info[idx]).albedo, to_info(info[idx]).emission);
     
     @if(apply_img) { 
-        let pix_is = fma((Rs.out_radiance * Rs.W), to_info(info[idx]).albedo, to_info(info[idx]).emission);
         textureStore(output, id.xy, vec4<f32>((pix_is), 1.0));
     }
 
     @if(apply_pg) {
-        
+        var chain = grid_load(Rs_point, Rs_normal, normalize(Rs_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, false);
+
+        chain = update_marcov_state(Rs.sample_point, Rs.visible_point, length(Rs.out_radiance), own_seed, false, chain, 1.0, 1.0, 1);
+
+        grid_store_markov_chain(Rs_point, Rs_normal, normalize(Rs_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, chain);
+        // textureStore(output, id.xy, vec4<f32>((vec3((normalize(get_light_dir(chain, Rs.sample_point)) + 1.0) / 2.0)), 1.0));
+        // textureStore(output, id.xy, vec4<f32>((vec3((normalize(Rs.visible_point - Rs.sample_point) + 1.0) / 2.0)), 1.0));
+        // textureStore(output, id.xy, vec4<f32>(Rs_point, 1.0));
     }
 
     //let pix_is = fma(safe_div_vec3(out_radiance, f32(sample_is_samples)), to_info(info[idx]).albedo, to_info(info[idx]).emission);

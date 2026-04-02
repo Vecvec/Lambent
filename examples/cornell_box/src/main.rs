@@ -365,6 +365,10 @@ fn main() {
             ("IS_SPACE", IS_SPACE as f64),
             //("IMPORTANCE_LIKELIHOOD".to_string(), 0.3),
         ],
+        lambent::importance_sampling::ResamplingOptions {
+            apply_to_image: false,
+            update_path_guiding: true,
+        },
     );
 
     #[cfg(feature = "denoise")]

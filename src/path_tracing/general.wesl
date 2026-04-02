@@ -1,5 +1,5 @@
 import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx };
-import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, };
+import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, grid_loc, grid_load, grid_store_markov_chain, strip_NaN_vec3, normalised_to_u32, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, CACHE_TIMEOUT, };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -114,139 +114,8 @@ fn get_rand(seed:u32) -> vec4<f32> {
     }
 }*/
 
-const F32_EXP_FIELD:u32 = 0x7F800000;
-const F32_SIGN_FEILD:u32 = 0x80000000;
-
-fn strip_NaN(float: f32) -> f32 {
-    let is_nan_or_inf = (bitcast<u32>(float) & F32_EXP_FIELD) == F32_EXP_FIELD;
-    if is_nan_or_inf {
-        let mantissa = bitcast<u32>(float) & ~(F32_EXP_FIELD | F32_SIGN_FEILD);
-        if mantissa == 0 {
-            return 10000.0;
-        }
-        return 0.0;
-    } else {
-        return float;
-    }
-}
-
-fn strip_NaN_vec3(float: vec3<f32>) -> vec3<f32> {
-    return vec3(strip_NaN(float.x), strip_NaN(float.y), strip_NaN(float.z));
-}
-
-const TOP_VEC2_u16_1_BITS = 0x80008000u;
-const TOP_VEC2_u16_2_BITS = 0xC000C000u;
-const TOP_VEC2_u16_4_BITS = 0xF000F000u;
-const TOP_VEC2_u16_8_BITS = 0xFF00FF00u;
-
-const QUANTIZE_BLOCK_SIZE = 2.0;
-fn quantize_packed2x16snorm(initial: u32) -> u32 {
-    return pack2x16snorm(clamp(round(unpack2x16snorm(initial) / QUANTIZE_BLOCK_SIZE) * QUANTIZE_BLOCK_SIZE, vec2(-1.0), vec2(1.0)));
-}
-
-// generate a (highly quantized) version of the incoming vector.
-fn incoming_hash(vector: vec3<f32>) -> u32 {
-    var hash = 0u;
-
-    hash |= u32(vector.x > 0.0) << 0; 
-    hash |= u32(vector.y > 0.0) << 1;
-    hash |= u32(vector.z > 0.0) << 2;
-
-    return hash;
-}
-
-// Seems like the paper counts 1 as a prime.
-const PRIMES = vec4<u32>(1, 687603047, 571899763, 894271171);
-
-fn primary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u32 {
-    let normal_u32 = normalised_to_u32(normal) & TOP_VEC2_u16_8_BITS;
-    let incoming_u32 = rand_u32(incoming_hash(incoming));
-    let to_hash = vec4<u32>(bitcast<vec3<u32>>(loc), (normal_u32));
-    let hash = PRIMES * to_hash;
-    return (((hash.x ^ hash.y) ^ hash.z) ^ hash.w) ^ (incoming_u32 * 840057787);
-}
-
-const SECONDARY_PRIMES = vec4<u32>(1699644091, 550105817, 956114303, 155096983);
-
-fn secondary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u32 {
-    let normal_u32 = normalised_to_u32(normal) & TOP_VEC2_u16_8_BITS;
-    let incoming_u32 = 0u;//normalised_to_u32(quantize_vec3(incoming));
-    let to_hash = vec4<u32>(bitcast<vec3<u32>>(loc), (normal_u32));
-    let hash = SECONDARY_PRIMES * to_hash;
-    // zero is invalid, imples not set.
-    return ((rand_u32((hash.x ^ hash.y) ^ hash.z) ^ hash.w) ^ (incoming_u32 * 284005801)) | 1;
-}
-
-const GRID_SIZE: f32 = 0.1;
-const SIZE_PER_GRID_CHANGE = 1.0;
-fn grid_loc(pos: vec3<f32>) -> vec3<i32> {
-    let diff = abs(pos - camera_loc);
-    let len = max(diff.x, max(diff.y, diff.z));
-    let num_shifts = u32(log2(max(len / SIZE_PER_GRID_CHANGE, 1.0)));
-    let mask: u32 = (U32_MAX << min(num_shifts, 30));
-    return vec3<i32>(pos / GRID_SIZE) & vec3(bitcast<i32>(mask));
-}
-
-const CACHE_TIMEOUT = 30u;
-
-fn grid_load(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, force_old: bool) -> MarcovChainState {
-    let grid_pos = grid_loc(pos);
-    let hash = primary_hasher(grid_pos, normal, incoming);
-    let idx = hash % arrayLength(&world_markov_chains);
-    var s: MarcovChainState;
-    s.light_source.x = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[0]));
-    s.light_source.y = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[1]));
-    s.light_source.z = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[2]));
-    s.mean_cosine = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.mean_cosine));
-    s.weight_sum = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.weight_sum));
-    s.num_samples = atomicLoad(&world_markov_chains[idx].chain.num_samples);
-    s.score = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.score));
-    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hasher(grid_pos, normal, incoming) || force_old) {
-        if (atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming)) {
-            s.light_source.x = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[0]));
-            s.light_source.y = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[1]));
-            s.light_source.z = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[2]));
-            s.mean_cosine = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.mean_cosine));
-            s.weight_sum = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.weight_sum));
-            s.num_samples = atomicLoad(&old_world_markov_chains[idx].chain.num_samples);
-            s.score = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.score));
-        } else {
-            s = MarcovChainState();
-        }
-    } else {
-        world_markov_chains[idx].timeout = CACHE_TIMEOUT;
-    }
-    s.light_source.x = strip_NaN(s.light_source.x);
-    s.light_source.y = strip_NaN(s.light_source.y);
-    s.light_source.z = strip_NaN(s.light_source.z);
-    s.mean_cosine = strip_NaN(s.mean_cosine);
-    s.weight_sum = strip_NaN(s.weight_sum);
-    s.score = strip_NaN(s.score);
-    return s;
-}
-
-fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, state: MarcovChainState) {
-    let grid_pos = grid_loc(pos);
-    let hash = primary_hasher(grid_pos, normal, incoming);
-    let idx = hash % arrayLength(&world_markov_chains);
-    let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
-    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash) {
-        if !(atomicCompareExchangeWeak(&world_markov_chains[idx].secondary_hash, INVALID_KEY, secondary_hash).exchanged) {
-            return;
-        }
-    }
-    atomicStore(&world_markov_chains[idx].chain.light_source[0], bitcast<u32>(state.light_source.x));
-    atomicStore(&world_markov_chains[idx].chain.light_source[1], bitcast<u32>(state.light_source.y));
-    atomicStore(&world_markov_chains[idx].chain.light_source[2], bitcast<u32>(state.light_source.z));
-    atomicStore(&world_markov_chains[idx].chain.mean_cosine, bitcast<u32>(state.mean_cosine));
-    atomicStore(&world_markov_chains[idx].chain.weight_sum, bitcast<u32>(state.weight_sum));
-    atomicStore(&world_markov_chains[idx].chain.num_samples, state.num_samples);
-    atomicStore(&world_markov_chains[idx].chain.score, bitcast<u32>(state.score));
-    world_markov_chains[idx].timeout = CACHE_TIMEOUT;
-}
-
 fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) -> vec3<f32> {
-    let grid_pos = grid_loc(pos);
+    let grid_pos = grid_loc(pos, camera_loc);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     var num_samples = atomicLoad(&world_markov_chains[idx].num_samples);
@@ -271,7 +140,7 @@ fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3
 }
 
 fn grid_add_radiance(pos:vec3<f32>, normal:vec3<f32>, incoming: vec3<f32>, radiance: vec3<f32>) {
-    let grid_pos = grid_loc(pos);
+    let grid_pos = grid_loc(pos, camera_loc);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
@@ -339,9 +208,14 @@ struct MarcovChainHolder {
 }
 
 const NUM_RESAMPLES_SCREEN_SPACE = 4;
-const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 12;
+const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 8;
+const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE = 4;
 const NUM_RESAMPLES_WORLD_SPACE = 4;
-const NUM_NON_PIXEL_RESAMPLES = NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_WORLD_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME;
+// const NUM_RESAMPLES_SCREEN_SPACE = 0;
+// const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 0;
+// const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE = 0;
+// const NUM_RESAMPLES_WORLD_SPACE = 4;
+const NUM_NON_PIXEL_RESAMPLES = NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_WORLD_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE;
 const NUM_RESAMPLES = NUM_NON_PIXEL_RESAMPLES + 1;
 //const NUM_NON_PIXEL_RESAMPLES = 0;
 var<private> other_pixels_marcov_chain_states: MarcovChainHolder;
@@ -361,8 +235,10 @@ fn get_tentative_marcov_chain(subgroup_id:u32) -> MarcovChainState {
 }
 
 const RESAMPLE_SIZE: u32 = 91;
+const RESAMPLE_SIZE_CLOSE: u32 = 5;
 
 const RESAMPLE_SIZE_SHIFT: i32 = i32(RESAMPLE_SIZE) / 2;
+const RESAMPLE_SIZE_SHIFT_CLOSE: i32 = i32(RESAMPLE_SIZE_CLOSE) / 2;
 
 fn fill_mc_screen_space_states(own_seed: ptr<function, u32>, sub_size: u32, pix_pos: vec2<u32>, size: vec2<u32>) {
     var i = 0;
@@ -382,17 +258,29 @@ fn fill_mc_screen_space_states(own_seed: ptr<function, u32>, sub_size: u32, pix_
         let idx = neighbour.x + (neighbour.y * size.x);
         other_pixels_marcov_chain_states.state[i] = old_markov_chains[idx];
     }
+    for (; i < (NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME + NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE); i++) {
+        let x_rand = rand_u32(*own_seed);
+        *own_seed = x_rand;
+        let y_rand = rand_u32(*own_seed);
+        *own_seed = y_rand;
+        let x = i32(x_rand % RESAMPLE_SIZE_CLOSE) - RESAMPLE_SIZE_SHIFT_CLOSE;
+        let y = i32(y_rand % RESAMPLE_SIZE_CLOSE) - RESAMPLE_SIZE_SHIFT_CLOSE;
+        // TODO: what about out of range pixels? Should we skip them?
+        let neighbour = vec2<u32>(vec2<i32>(pix_pos) + vec2<i32>(x, y));
+        let idx = neighbour.x + (neighbour.y * size.x);
+        other_pixels_marcov_chain_states.state[i] = old_markov_chains[idx];
+    }
 }
 
 const JITTER_SIZE = GRID_SIZE * 1.5;
 //const JITTER_SIZE = 0.0;
 fn fill_mc_world_space_states(own_seed: ptr<function, u32>, pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) {
-    for (var i = (NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME); i < NUM_NON_PIXEL_RESAMPLES; i++) {
+    for (var i = (NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE); i < NUM_NON_PIXEL_RESAMPLES; i++) {
         let force_self = i == 0;
         let rand_candidate = rand_f32(*own_seed) < 0.7 && !force_self;
         let jitter_mul = select(select(1.0, 0.75, rand_candidate), 0.0, force_self);
         let jitter = rand_xz_vec3_f32(own_seed)*JITTER_SIZE*jitter_mul;
-        let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, rand_candidate);
+        let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, camera_loc, rand_candidate);
         other_pixels_marcov_chain_states.state[i] = s;
         *own_seed++;
     }
@@ -627,6 +515,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     let start_dir = ray.direction;
     var first_dir: vec3<f32>;
     var last_dir: vec3<f32>;
+
+    let mc_chain = tentative_marcov_chain_state;
+
     var last_diffuse = false;
     for (var i = 0u; i < BOUNCES; i++) {
         let intersection = ray_hit(&ray);
@@ -639,9 +530,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out + radiance_reflected);
                 let weight = length(radiance_out + (radiance_reflected));
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0, sum_mc);
-                    grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
+                    grid_store_markov_chain(ray.origin, last_normal, last_dir, camera_loc, state);
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.1, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
                     self_seed++;
                 }
             }
@@ -890,9 +781,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out);
                 let weight = length(radiance_out);
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, false), 1.0, sum_mc);
-                    grid_store_markov_chain(ray.origin, last_normal, last_dir, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
+                    grid_store_markov_chain(ray.origin, last_normal, last_dir, camera_loc, state);
+                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
                     self_seed++;
                 }
             }
@@ -903,9 +794,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
 
     // A final train of the markov chain with the real radiance
     //sample.out_radiance = (sample.color - sample.emission) / sample.albedo;
-    let world_cache = grid_load(sample.point, sample.normal, start_dir, false);
-    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0, sum_mc);
-    grid_store_markov_chain(sample.point, sample.normal, start_dir, state);
+    let world_cache = grid_load(sample.point, sample.normal, start_dir, camera_loc, false);
+    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0, sum_mc, NUM_RESAMPLES);
+    grid_store_markov_chain(sample.point, sample.normal, start_dir, camera_loc, state);
     // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     grid_add_radiance(sample.point, sample.normal, start_dir, sample.out_radiance);
 
@@ -916,14 +807,14 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     storageBarrier();
     // sample.albedo = first_dir;
     // sample.color = vec3(get_kappa(tentative_marcov_chain_state) / 100.0);
-    // sample.albedo = vec3((normalize(get_light_dir(tentative_marcov_chain_state, sample.point)) + 1.0) / 2.0);
+    // sample.color = vec3((normalize(get_light_dir(mc_chain, sample.point)) + 1.0) / 2.0);
     // sample.color = vec3(get_kappa(world_cache) / 5.0);
     // sample.albedo = vec3((normalize(get_light_dir(world_cache, sample.point)) + 1.0) / 2.0);
     //sample.color = safe_div_vec3(state.light_source, state.weight_sum);
     //sample.color = vec3(f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP), (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 10.0, (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 100.0);
     //sample.color = vec3(world_cache.weight_sum / 1.0);
     //sample.color = sample.out_radiance;
-    //sample.color = (grid_load_radiance_estimate(sample.point, sample.normal, start_dir));
+    // sample.color = (grid_load_radiance_estimate(sample.point, sample.normal, start_dir));
     let grid_pos = vec3<i32>(sample.point / GRID_SIZE);
     let hash = primary_hasher(grid_pos, sample.normal, start_dir);
     //sample.color = u32_to_colour(hash);
@@ -1251,17 +1142,3 @@ fn oren_nayer_improved(in: vec3<f32>, seed:u32, roughness:f32, normal:vec3<f32>,
 }
 
 const U16_MAX = 0xFFFFu;
-
-fn normalised_to_u32(normalized:vec3<f32>) -> u32 {
-    let v = normalized / max((abs(normalized.x) + abs(normalized.y) + abs(normalized.z)), 0.01);
-    var out = 0u;
-    if (v.y >= 0.0) {
-        out = pack2x16snorm(v.xz);
-    } else {
-        //out = pack2x16unorm(vec2<f32>((encode_axis(v.x)), (encode_axis(v.z))));
-        //let xz = (1.0 - abs(v.zx)) * vec2<f32>(float_sign(v.x), float_sign(v.z));
-        let xz = vec2<f32>(copy_sign(v.x, 1.0 - abs(v.z)), copy_sign(v.z, 1.0 - abs(v.x)));
-        out = pack2x16snorm(xz);
-    }
-    return out;
-}

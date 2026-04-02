@@ -1,4 +1,4 @@
-import package::bindings::{ Reservoir, CompressedInfo, MarcovChainState, near_zero };
+import package::bindings::{ Reservoir, CompressedInfo, MarcovChainState, world_markov_chains, old_world_markov_chains, near_zero, INVALID_KEY };
 
 const PI = 3.14159265358979323846264338327950288419716939937510;
 const HALF_PI = PI / 2.0;
@@ -314,7 +314,7 @@ fn safe_div_vec3(numerator: vec3<f32>, denominator: f32) -> vec3<f32> {
 // Moved the number in the paper outside to a constant.
 const MARCOV_CHAIN_SAMPLE_CLAMP = 1024;
 
-fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat: f32, seed: u32, not_vmf: bool, old_state: MarcovChainState, confidence: f32, sum_mc: f32) -> MarcovChainState {
+fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat: f32, seed: u32, not_vmf: bool, old_state: MarcovChainState, confidence: f32, sum_mc: f32, num_resamples: u32) -> MarcovChainState {
     var state = old_state;
     if not_vmf {
         // While the origional paper used this, the newer one instead resets if it couldn't find the light
@@ -328,7 +328,7 @@ fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat:
         tentative_marcov_chain_state.weight_sum = score;
         tentative_marcov_chain_state.light_source = score * x2;
         tentative_marcov_chain_state.mean_cosine = score;
-    } else */if ((rand * sum_mc) < (p_hat * f32(NUM_RESAMPLES))) {
+    } else */if ((rand * sum_mc) < (p_hat * f32(num_resamples))) {
         if near_zero(length(get_light_dir(state, x1))) {
             return state;
         }
@@ -348,4 +348,149 @@ fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat:
 fn get_light_dir(state: MarcovChainState, current: vec3<f32>) -> vec3<f32> {
     return safe_div_vec3(state.light_source, state.weight_sum) - current;
     //return state.light_source - current;
+}
+
+const F32_EXP_FIELD:u32 = 0x7F800000;
+const F32_SIGN_FEILD:u32 = 0x80000000;
+
+fn strip_NaN(float: f32) -> f32 {
+    let is_nan_or_inf = (bitcast<u32>(float) & F32_EXP_FIELD) == F32_EXP_FIELD;
+    if is_nan_or_inf {
+        let mantissa = bitcast<u32>(float) & ~(F32_EXP_FIELD | F32_SIGN_FEILD);
+        if mantissa == 0 {
+            return 10000.0;
+        }
+        return 0.0;
+    } else {
+        return float;
+    }
+}
+
+fn strip_NaN_vec3(float: vec3<f32>) -> vec3<f32> {
+    return vec3(strip_NaN(float.x), strip_NaN(float.y), strip_NaN(float.z));
+}
+
+const TOP_VEC2_u16_1_BITS = 0x80008000u;
+const TOP_VEC2_u16_2_BITS = 0xC000C000u;
+const TOP_VEC2_u16_4_BITS = 0xF000F000u;
+const TOP_VEC2_u16_8_BITS = 0xFF00FF00u;
+
+const QUANTIZE_BLOCK_SIZE = 2.0;
+fn quantize_packed2x16snorm(initial: u32) -> u32 {
+    return pack2x16snorm(clamp(round(unpack2x16snorm(initial) / QUANTIZE_BLOCK_SIZE) * QUANTIZE_BLOCK_SIZE, vec2(-1.0), vec2(1.0)));
+}
+
+// generate a (highly quantized) version of the incoming vector.
+fn incoming_hash(vector: vec3<f32>) -> u32 {
+    var hash = 0u;
+
+    hash |= u32(vector.x > 0.0) << 0; 
+    hash |= u32(vector.y > 0.0) << 1;
+    hash |= u32(vector.z > 0.0) << 2;
+
+    return hash;
+}
+
+// Seems like the paper counts 1 as a prime.
+const PRIMES = vec4<u32>(1, 687603047, 571899763, 894271171);
+
+fn primary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u32 {
+    let normal_u32 = normalised_to_u32(normal) & TOP_VEC2_u16_8_BITS;
+    let incoming_u32 = rand_u32(incoming_hash(incoming));
+    let to_hash = vec4<u32>(bitcast<vec3<u32>>(loc), (normal_u32));
+    let hash = PRIMES * to_hash;
+    return (((hash.x ^ hash.y) ^ hash.z) ^ hash.w) ^ (incoming_u32 * 840057787);
+}
+
+const SECONDARY_PRIMES = vec4<u32>(1699644091, 550105817, 956114303, 155096983);
+
+fn secondary_hasher(loc: vec3<i32>, normal: vec3<f32>, incoming: vec3<f32>) -> u32 {
+    let normal_u32 = normalised_to_u32(normal) & TOP_VEC2_u16_8_BITS;
+    let incoming_u32 = 0u;//normalised_to_u32(quantize_vec3(incoming));
+    let to_hash = vec4<u32>(bitcast<vec3<u32>>(loc), (normal_u32));
+    let hash = SECONDARY_PRIMES * to_hash;
+    // zero is invalid, imples not set.
+    return ((rand_u32((hash.x ^ hash.y) ^ hash.z) ^ hash.w) ^ (incoming_u32 * 284005801)) | 1;
+}
+
+const GRID_SIZE: f32 = 0.1;
+const SIZE_PER_GRID_CHANGE = 1.0;
+fn grid_loc(pos: vec3<f32>, camera_loc: vec3<f32>) -> vec3<i32> {
+    let diff = abs(pos - camera_loc);
+    let len = max(diff.x, max(diff.y, diff.z));
+    let num_shifts = u32(log2(max(len / SIZE_PER_GRID_CHANGE, 1.0)));
+    let mask: u32 = (U32_MAX << min(num_shifts, 30));
+    return vec3<i32>(pos / GRID_SIZE) & vec3(bitcast<i32>(mask));
+}
+
+const CACHE_TIMEOUT = 30u;
+
+fn grid_load(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, camera_loc: vec3<f32>, force_old: bool) -> MarcovChainState {
+    let grid_pos = grid_loc(pos, camera_loc);
+    let hash = primary_hasher(grid_pos, normal, incoming);
+    let idx = hash % arrayLength(&world_markov_chains);
+    var s: MarcovChainState;
+    s.light_source.x = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[0]));
+    s.light_source.y = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[1]));
+    s.light_source.z = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.light_source[2]));
+    s.mean_cosine = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.mean_cosine));
+    s.weight_sum = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.weight_sum));
+    s.num_samples = atomicLoad(&world_markov_chains[idx].chain.num_samples);
+    s.score = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.score));
+    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hasher(grid_pos, normal, incoming) || force_old) {
+        if (atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming)) {
+            s.light_source.x = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[0]));
+            s.light_source.y = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[1]));
+            s.light_source.z = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[2]));
+            s.mean_cosine = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.mean_cosine));
+            s.weight_sum = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.weight_sum));
+            s.num_samples = atomicLoad(&old_world_markov_chains[idx].chain.num_samples);
+            s.score = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.score));
+        } else {
+            s = MarcovChainState();
+        }
+    } else {
+        world_markov_chains[idx].timeout = CACHE_TIMEOUT;
+    }
+    s.light_source.x = strip_NaN(s.light_source.x);
+    s.light_source.y = strip_NaN(s.light_source.y);
+    s.light_source.z = strip_NaN(s.light_source.z);
+    s.mean_cosine = strip_NaN(s.mean_cosine);
+    s.weight_sum = strip_NaN(s.weight_sum);
+    s.score = strip_NaN(s.score);
+    return s;
+}
+
+fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, camera_loc: vec3<f32>, state: MarcovChainState) {
+    let grid_pos = grid_loc(pos, camera_loc);
+    let hash = primary_hasher(grid_pos, normal, incoming);
+    let idx = hash % arrayLength(&world_markov_chains);
+    let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
+    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash) {
+        if !(atomicCompareExchangeWeak(&world_markov_chains[idx].secondary_hash, INVALID_KEY, secondary_hash).exchanged) {
+            return;
+        }
+    }
+    atomicStore(&world_markov_chains[idx].chain.light_source[0], bitcast<u32>(state.light_source.x));
+    atomicStore(&world_markov_chains[idx].chain.light_source[1], bitcast<u32>(state.light_source.y));
+    atomicStore(&world_markov_chains[idx].chain.light_source[2], bitcast<u32>(state.light_source.z));
+    atomicStore(&world_markov_chains[idx].chain.mean_cosine, bitcast<u32>(state.mean_cosine));
+    atomicStore(&world_markov_chains[idx].chain.weight_sum, bitcast<u32>(state.weight_sum));
+    atomicStore(&world_markov_chains[idx].chain.num_samples, state.num_samples);
+    atomicStore(&world_markov_chains[idx].chain.score, bitcast<u32>(state.score));
+    world_markov_chains[idx].timeout = CACHE_TIMEOUT;
+}
+
+fn normalised_to_u32(normalized:vec3<f32>) -> u32 {
+    let v = normalized / max((abs(normalized.x) + abs(normalized.y) + abs(normalized.z)), 0.01);
+    var out = 0u;
+    if (v.y >= 0.0) {
+        out = pack2x16snorm(v.xz);
+    } else {
+        //out = pack2x16unorm(vec2<f32>((encode_axis(v.x)), (encode_axis(v.z))));
+        //let xz = (1.0 - abs(v.zx)) * vec2<f32>(float_sign(v.x), float_sign(v.z));
+        let xz = vec2<f32>(copy_sign(v.x, 1.0 - abs(v.z)), copy_sign(v.z, 1.0 - abs(v.x)));
+        out = pack2x16snorm(xz);
+    }
+    return out;
 }
