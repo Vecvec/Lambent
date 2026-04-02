@@ -196,6 +196,7 @@ fn test() {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn exe_shader(
     shader: &dyn RayTracingShaderDST,
     vertices: &Vertices,
@@ -373,7 +374,7 @@ fn run_shader(
         None,
         None,
     );
-    let samples: u32 = if run_is { 1 } else { 4 };
+    let _samples: u32 = if run_is { 1 } else { 4 };
 
     #[cfg(feature = "wip-features")]
     let layout = crate::low_level::pipeline_layout(
@@ -578,7 +579,7 @@ fn run_shader(
                 );
                 continue;
             }
-            _ => return Err(ExcErr::Other(format!("Failed to get surface"))),
+            _ => return Err(ExcErr::Other("Failed to get surface".to_string())),
         };
         let output_tex = device.create_texture(&TextureDescriptor {
             label: None,

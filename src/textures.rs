@@ -179,6 +179,7 @@ pub fn bind_group_from_textures(
     (bg, bgl)
 }
 
+#[expect(clippy::too_many_arguments)]
 pub fn bind_group_from_textures_bindgroup_layout(
     device: &Device,
     queue: &Queue,
@@ -214,7 +215,7 @@ pub fn bind_group_from_textures_bindgroup_layout(
     }
     let bg = device.create_bind_group(&BindGroupDescriptor {
         label: None,
-        layout: layout,
+        layout,
         entries: &[
             BindGroupEntry {
                 binding: 0,

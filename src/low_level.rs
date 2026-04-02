@@ -133,7 +133,7 @@ impl Default for RayTracingOptions {
 ///
 /// You may specify a fallback resolver that will resolve after these defined packages are also called.
 ///
-/// # Safety:
+/// # Safety
 ///
 /// - The function returned by `source`, when executed, *must* return in a finite amount of time.
 pub unsafe trait IntersectionHandler: 'static {
@@ -150,7 +150,7 @@ pub unsafe trait IntersectionHandler: 'static {
 /// The source returned from `shader_source_without_intersection_handler` should have an override called
 /// `SAMPLES`.
 ///
-/// # Safety:
+/// # Safety
 ///
 /// - The shader returned by `create_shader`, when executed, *must* return in a finite amount of time.
 pub unsafe trait RayTracingShader: Sized + 'static {
@@ -193,7 +193,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
 ///
 /// Implementors should implement [RayTracingShader] instead
 ///
-/// # Safety:
+/// # Safety
 ///
 /// Same as [RayTracingShader]
 pub unsafe trait RayTracingShaderDST {

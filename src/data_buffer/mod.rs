@@ -289,7 +289,7 @@ impl DataBuffers {
                 let execution_work_groups = buffers
                     .limits
                     .max_compute_workgroups_per_dimension
-                    .min(num_workgroups.try_into().unwrap_or(<u32>::MAX));
+                    .min(num_workgroups);
                 num_workgroups -= execution_work_groups;
 
                 pass.set_immediates(0, &num_workgroups.to_ne_bytes());

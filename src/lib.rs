@@ -28,6 +28,7 @@ pub use data_buffer::{AdvanceOptions, BufferType, DataBuffers};
 pub use low_level::RayTracingOptions;
 
 /// Refractive indices from https://refractiveindex.info/
+#[allow(clippy::excessive_precision, reason = "These are the mesured values, so they should have as much precision as the real values")]
 pub mod refractive_indices {
     use std::ops::Range;
 
@@ -126,7 +127,8 @@ impl Material {
     /// refractive index, and the type.
     ///
     /// - refractive_index: and optional range between
-    /// refractive index at 760 nm (red) and 340 nm (violet)
+    ///   refractive index at 760 nm (red) and 340 nm (violet)
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         tex_pos_1: [f32; 2],
         tex_pos_2: [f32; 2],
@@ -289,7 +291,7 @@ impl<S: RayTracingShader> RayTracer<S> {
     pub fn set_intersection_handler(&mut self, handler: &dyn IntersectionHandler) {
         self.intersection_handler = handler.source();
         self.extra_bgls = handler.additional_bind_group_layouts(&self.device);
-        self.resolver = handler.resolver().map(|h| RcResolver(h));
+        self.resolver = handler.resolver().map(RcResolver);
     }
 
     pub fn create_pipeline<Opts: low_level::RayTracerOptions>(
@@ -326,6 +328,7 @@ impl<S: RayTracingShader> RayTracer<S> {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn create_pipeline<Opts: low_level::RayTracerOptions>(
     blas_count: NonZeroU32,
     diffuse_count: NonZeroU32,
@@ -335,20 +338,20 @@ fn create_pipeline<Opts: low_level::RayTracerOptions>(
     src: String,
     device: &Device,
     extra_bgls: &[BindGroupLayout],
-    intersection_handler: &String,
+    intersection_handler: &str,
     label: Option<&str>,
     resolver: &Option<RcResolver>,
 ) -> ComputePipeline {
     let pipeline_layout = low_level::pipeline_layout(
-        &device,
+        device,
         blas_count,
         diffuse_count,
         emission_count,
         attribute_count,
-        &extra_bgls,
+        extra_bgls,
     );
 
-    let compiled = compile_shader(src, &intersection_handler, &resolver);
+    let compiled = compile_shader(src, intersection_handler, resolver);
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label,
