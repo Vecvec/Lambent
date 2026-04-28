@@ -150,6 +150,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
         own_seed = rand_u32(own_seed);
         //Z = f32(unpack4xU8(Rs.M_valid).x);
         sample_is_samples = sample_is_samples + 1u;
+
+        @if(apply_pg) {
+            var chain = grid_load(Rn.sample_point, Rn_normal, normalize(Rn.sample_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, false);
+                
+            chain = update_marcov_state(Rn.sample_point, Rn.visible_point, length(Rn.out_radiance), own_seed, false, chain, 1.0, 1.0, 1);
+                
+            grid_store_markov_chain(Rn.sample_point, Rn_normal, normalize(Rn.sample_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, chain);
+            // textureStore(output, id.xy, vec4<f32>((vec3((normalize(get_light_dir(chain, Rs.sample_point)) + 1.0) / 2.0)), 1.0));
+            // textureStore(output, id.xy, vec4<f32>((vec3((normalize(Rs.visible_point - Rs.sample_point) + 1.0) / 2.0)), 1.0));
+            // textureStore(output, id.xy, vec4<f32>(Rs_point, 1.0));
+        }
     }
     var confidence_i_p_i = 0.0;
     var confidence_p_sum = 0.0;
@@ -187,17 +198,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) wor
     
     @if(apply_img) { 
         textureStore(output, id.xy, vec4<f32>((pix_is), 1.0));
-    }
-
-    @if(apply_pg) {
-        var chain = grid_load(Rs_point, Rs_normal, normalize(Rs_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, false);
-
-        chain = update_marcov_state(Rs.sample_point, Rs.visible_point, length(Rs.out_radiance), own_seed, false, chain, 1.0, 1.0, 1);
-
-        grid_store_markov_chain(Rs_point, Rs_normal, normalize(Rs_point - to_info(info[idx]).cam_loc), to_info(info[idx]).cam_loc, chain);
-        // textureStore(output, id.xy, vec4<f32>((vec3((normalize(get_light_dir(chain, Rs.sample_point)) + 1.0) / 2.0)), 1.0));
-        // textureStore(output, id.xy, vec4<f32>((vec3((normalize(Rs.visible_point - Rs.sample_point) + 1.0) / 2.0)), 1.0));
-        // textureStore(output, id.xy, vec4<f32>(Rs_point, 1.0));
     }
 
     //let pix_is = fma(safe_div_vec3(out_radiance, f32(sample_is_samples)), to_info(info[idx]).albedo, to_info(info[idx]).emission);

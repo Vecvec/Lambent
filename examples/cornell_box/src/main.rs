@@ -41,7 +41,7 @@ type RayTracer = lambent::RayTracer<path_tracing::Medium>;
 
 const SIZE: u32 = 320;
 
-const SAMPLES: NonZeroU32 = NonZeroU32::new(8).unwrap();
+const SAMPLES: NonZeroU32 = NonZeroU32::new(1).unwrap();
 
 const IS_SAMPLES: usize = 4;
 
@@ -735,7 +735,7 @@ fn main() {
                 comp_pass.dispatch_workgroups(size.width, size.height, 1);
                 if importance_sampling {
                     comp_pass.set_pipeline(&temporal_compute_pipeline);
-                    comp_pass.dispatch_workgroups(size.width, size.height, 1);
+                    // comp_pass.dispatch_workgroups(size.width, size.height, 1);
                     comp_pass.set_pipeline(&spacial_compute_pipeline);
                     comp_pass.dispatch_workgroups(size.width, size.height, 1);
                 }

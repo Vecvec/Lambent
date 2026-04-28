@@ -207,9 +207,9 @@ struct MarcovChainHolder {
     sum_weight_sum: f32,
 }
 
-const NUM_RESAMPLES_SCREEN_SPACE = 4;
-const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 8;
-const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE = 4;
+const NUM_RESAMPLES_SCREEN_SPACE = 1;
+const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 2;
+const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE = 1;
 const NUM_RESAMPLES_WORLD_SPACE = 4;
 // const NUM_RESAMPLES_SCREEN_SPACE = 0;
 // const NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME = 0;
@@ -515,6 +515,8 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     let start_dir = ray.direction;
     var first_dir: vec3<f32>;
     var last_dir: vec3<f32>;
+    var first_pdf: f32;
+    var dbg_out: vec3<f32>;
 
     let mc_chain = tentative_marcov_chain_state;
 
@@ -525,16 +527,16 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
             let new_pos = at(&ray, intersection.t);
             // We have at least hit the scene twice (this is our second time)
             if i != 0u {
-                let radiance_reflected = strip_NaN_vec3((intersection.color * grid_load_radiance_estimate(new_pos, intersection.normal, ray.direction)) * cached_brdf / cached_pdf);
-                let radiance_out = (intersection.emission * cached_brdf / cached_pdf);
-                grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out + radiance_reflected);
-                let weight = length(radiance_out + (radiance_reflected));
+                let radiance_reflected = strip_NaN_vec3((intersection.color * grid_load_radiance_estimate(new_pos, intersection.normal, ray.direction)) * cached_brdf);
+                let radiance_out = (intersection.emission * cached_brdf);
+                grid_add_radiance(ray.origin, last_normal, last_dir, (radiance_out + radiance_reflected) / cached_pdf);
+                let weight = length((radiance_reflected) + radiance_out);
                 if weight > 0.0 {
                     let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
                     grid_store_markov_chain(ray.origin, last_normal, last_dir, camera_loc, state);
-                    tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.1, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
                     self_seed++;
                 }
+                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
             }
             last_normal = intersection.normal;
             last_dir = ray.direction;
@@ -551,6 +553,8 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 sample.normal = intersection.normal;
                 sample.albedo = accum_albedo;
             } else if (i == 1u) {
+                // dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.5, 1.0, 0.5) - camera_loc)) / 500.0);
+                dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.62, 0.66, 0.44) - camera_loc)) / 100.0);
                 sample.visible_point = ray.origin;
                 sample.visible_normal = intersection.normal;
             }
@@ -660,7 +664,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                     let Xs = from_onb_no_tangent(vec3(strip_NaN(V.x * norm_V), W, strip_NaN(V.y * norm_V)), mean);
                     let dir_markov = normalize(Xs);
                     // Calculate pdf of cosine for cosine direction
-                    var unnormalied_confidences = array<f32, 2>(0.2, 0.8);
+                    var unnormalied_confidences = array<f32, 2>(0.5, 0.5);
                     //var unnormalied_confidences = array<f32, 2>(0.8 , 0.2);
                     if (!marcov_chain_valid(s) || near_zero(length(light_dir)) || near_zero(s.weight_sum) || near_zero(length(Xs))) {
                         unnormalied_confidences[0] = 1.0;
@@ -709,6 +713,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                         //return sample;
                     }
                     cached_pdf = final_pdf;
+                    if i == 0u {
+                        first_pdf = cached_pdf;
+                    }
                     cached_brdf = max(dot((dir), intersection.normal) / PI, 0.0);
                     let normalization_factor = (abs(cached_brdf)) / max(norm_divisor, 0.001);
                     color = color * normalization_factor * diffuse;
@@ -727,6 +734,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 } else if (intersection.ty == TRANSPARENT) {
                     cached_pdf = 1.0;
                     cached_brdf = 1.0;
+                    if i == 0u {
+                        first_pdf = cached_pdf;
+                    }
                     //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
                     ray.direction = refract(ray.direction, normal, refractive_index);
                     let dot = dot(-ray.direction, intersection.normal);
@@ -742,6 +752,9 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
             } else {
                 cached_pdf = 1.0;
                 cached_brdf = 1.0;
+                if i == 0u {
+                    first_pdf = cached_pdf;
+                }
                 ray.direction = reflect(ray.direction, normal);
                 let dot = dot(ray.direction, intersection.normal);
                 if (dot < 0.0) {
@@ -777,8 +790,8 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 sample.out_radiance = fma(out_radiance_colour, bg_color, sample.out_radiance);
 
                 // update markov chains
-                let radiance_out = (bg_color * cached_brdf / cached_pdf);
-                grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out);
+                let radiance_out = (bg_color * cached_brdf);
+                grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out / cached_pdf);
                 let weight = length(radiance_out);
                 if weight > 0.0 {
                     let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
@@ -795,7 +808,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     // A final train of the markov chain with the real radiance
     //sample.out_radiance = (sample.color - sample.emission) / sample.albedo;
     let world_cache = grid_load(sample.point, sample.normal, start_dir, camera_loc, false);
-    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance), self_seed, false, world_cache, 1.0, sum_mc, NUM_RESAMPLES);
+    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance) * first_pdf, self_seed, false, world_cache, 1.0, sum_mc, NUM_RESAMPLES);
     grid_store_markov_chain(sample.point, sample.normal, start_dir, camera_loc, state);
     // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     grid_add_radiance(sample.point, sample.normal, start_dir, sample.out_radiance);
@@ -805,11 +818,17 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     sample.color /= vmf_weight;
     sample.out_radiance /= vmf_weight;
     storageBarrier();
+    // sample.color = dbg_out;
     // sample.albedo = first_dir;
     // sample.color = vec3(get_kappa(tentative_marcov_chain_state) / 100.0);
     // sample.color = vec3((normalize(get_light_dir(mc_chain, sample.point)) + 1.0) / 2.0);
     // sample.color = vec3(get_kappa(world_cache) / 5.0);
-    // sample.albedo = vec3((normalize(get_light_dir(world_cache, sample.point)) + 1.0) / 2.0);
+    // sample.color = vec3(all_vmf_pdfs(camera_loc, first_dir));
+    // sample.color = vec3(all_vmf_pdfs(camera_loc, first_dir));
+    // sample.color = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.62, 0.66, 0.44) - camera_loc)));
+    // sample.color = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.5, 1.0, 0.5) - camera_loc)) / 500.0);
+    // sample.color = vec3(vmf_pdf(normalize(get_light_dir(tentative_marcov_chain_state, camera_loc)), get_kappa(tentative_marcov_chain_state), first_dir) / 5.0);
+    // sample.color = vec3((normalize(get_light_dir(world_cache, sample.point)) + 1.0) / 2.0);
     //sample.color = safe_div_vec3(state.light_source, state.weight_sum);
     //sample.color = vec3(f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP), (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 10.0, (f32(world_cache.num_samples) / f32(MARCOV_CHAIN_SAMPLE_CLAMP)) * 100.0);
     //sample.color = vec3(world_cache.weight_sum / 1.0);

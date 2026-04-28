@@ -11,14 +11,21 @@ pub struct PathTracerOpts {
     pub restir_temporal: RestirTemporalMode,
 }
 
-impl Default for PathTracerOpts {
-    fn default() -> Self {
+impl PathTracerOpts {
+    pub const fn new() -> Self {
         Self {
             samples: low_level::DEFAULT_NUM_SAMPLES,
             tmin: low_level::DEFAULT_T_MIN,
             tmax: low_level::DEFAULT_T_MAX,
-            restir_temporal: Default::default(),
+            // the default
+            restir_temporal: RestirTemporalMode::PerPixel,
         }
+    }
+}
+
+impl Default for PathTracerOpts {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

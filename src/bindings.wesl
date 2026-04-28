@@ -161,6 +161,7 @@ struct Reservoir {
     sample_point: vec3<f32>,    // 16 16 12
     sample_normal: u32,         // 28 4 4
     out_radiance: vec3<f32>,    // 32 16 12
+    // 16 bits for type (currently only 8 bits)
     ty: u32,                    // 44 4 4
     roughness: f32,             // 48 4 4
     w: f32,                     // 52 4 4
