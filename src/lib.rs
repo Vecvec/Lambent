@@ -28,7 +28,10 @@ pub use data_buffer::{AdvanceOptions, BufferType, DataBuffers};
 pub use low_level::RayTracingOptions;
 
 /// Refractive indices from https://refractiveindex.info/
-#[allow(clippy::excessive_precision, reason = "These are the mesured values, so they should have as much precision as the real values")]
+#[allow(
+    clippy::excessive_precision,
+    reason = "These are the mesured values, so they should have as much precision as the real values"
+)]
 pub mod refractive_indices {
     use std::ops::Range;
 
@@ -81,16 +84,85 @@ impl Shader {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable, Debug, Default)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TexturePositions {
+    tex_pos_base_colour_1: u32,
+    tex_pos_base_colour_2: u32,
+    tex_pos_base_colour_3: u32,
+    tex_pos_emission_1: u32,
+    tex_pos_emission_2: u32,
+    tex_pos_emission_3: u32,
+    tex_pos_attributes_1: u32,
+    tex_pos_attributes_2: u32,
+    tex_pos_attributes_3: u32,
+    tex_pos_coat_1: u32,
+    tex_pos_coat_2: u32,
+    tex_pos_coat_3: u32,
+    tex_pos_sub_surface_1: u32,
+    tex_pos_sub_surface_2: u32,
+    tex_pos_sub_surface_3: u32,
+    tex_pos_metalness_1: u32,
+    tex_pos_metalness_2: u32,
+    tex_pos_metalness_3: u32,
+    tex_pos_specular_1: u32,
+    tex_pos_specular_2: u32,
+    tex_pos_specular_3: u32,
+}
+
+impl TexturePositions {
+    /// `tex_pos_specular` is for both the specular rougness and specular colour textures
+    pub fn new(
+        tex_pos_base_colour: [[f32; 2]; 3],
+        tex_pos_emission: [[f32; 2]; 3],
+        tex_pos_attributes: [[f32; 2]; 3],
+        tex_pos_coat_colour: [[f32; 2]; 3],
+        tex_pos_subsurface_colour: [[f32; 2]; 3],
+        tex_pos_metalness: [[f32; 2]; 3],
+        tex_pos_specular: [[f32; 2]; 3],
+    ) -> Self {
+        Self {
+            tex_pos_base_colour_1: pack2xf16(tex_pos_base_colour[0]),
+            tex_pos_base_colour_2: pack2xf16(tex_pos_base_colour[1]),
+            tex_pos_base_colour_3: pack2xf16(tex_pos_base_colour[2]),
+            tex_pos_emission_1: pack2xf16(tex_pos_emission[0]),
+            tex_pos_emission_2: pack2xf16(tex_pos_emission[1]),
+            tex_pos_emission_3: pack2xf16(tex_pos_emission[2]),
+            tex_pos_attributes_1: pack2xf16(tex_pos_attributes[0]),
+            tex_pos_attributes_2: pack2xf16(tex_pos_attributes[1]),
+            tex_pos_attributes_3: pack2xf16(tex_pos_attributes[2]),
+            tex_pos_coat_1: pack2xf16(tex_pos_coat_colour[0]),
+            tex_pos_coat_2: pack2xf16(tex_pos_coat_colour[1]),
+            tex_pos_coat_3: pack2xf16(tex_pos_coat_colour[2]),
+            tex_pos_sub_surface_1: pack2xf16(tex_pos_subsurface_colour[0]),
+            tex_pos_sub_surface_2: pack2xf16(tex_pos_subsurface_colour[1]),
+            tex_pos_sub_surface_3: pack2xf16(tex_pos_subsurface_colour[2]),
+            tex_pos_metalness_1: pack2xf16(tex_pos_metalness[0]),
+            tex_pos_metalness_2: pack2xf16(tex_pos_metalness[1]),
+            tex_pos_metalness_3: pack2xf16(tex_pos_metalness[2]),
+            tex_pos_specular_1: pack2xf16(tex_pos_specular[0]),
+            tex_pos_specular_2: pack2xf16(tex_pos_specular[1]),
+            tex_pos_specular_3: pack2xf16(tex_pos_specular[2]),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Material {
-    tex_pos_1: u32,
-    tex_pos_2: u32,
-    tex_pos_3: u32,
     tex_pos_recolour: u32,
-    tex_idx_diffuse_emission: u32,
-    tex_idx_attributes_ty: u32,
+    tex_idx_base_colour_emission: u32,
+    tex_idx_roughness_coat: u32,
+    tex_idx_subsurface_metalness: u32,
+    tex_idx_specular_colour_specular_rougness: u32,
+    /// A combination of the following:
+    /// - The material type (8 bit unsigned int)
+    /// - Whether the geometry is thin walled (1 bit)
+    /// - The subsurface scattering wieght of the object (7 bit unsigned int)
+    /// - The subsurface anisotopy  (16 bit signed int)
+    ty_thin_walled_subsurface: u32,
     emission_scale: u32,
     refractive_index: u32,
+    specular_refractive_index: u32,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -121,43 +193,70 @@ impl EmissionScale {
 }
 
 impl Material {
-    /// creates a material from 3 texture positions,
-    /// a texture index (the index into the texture loader),
+    /// texture index (the index into the texture loader),
     /// the brightness scale of the emission scale, the
     /// refractive index, and the type.
     ///
     /// - refractive_index: and optional range between
     ///   refractive index at 760 nm (red) and 340 nm (violet)
+    ///
+    /// Note: Not all these types will result in a different
+    /// Material. Things such as small refractive indices
+    /// are rounded to the nearest bf16
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        tex_pos_1: [f32; 2],
-        tex_pos_2: [f32; 2],
-        tex_pos_3: [f32; 2],
         tex_pos_recolour: [u16; 2],
-        tex_idx_diffuse: u16,
+        tex_idx_base_colour: u16,
         tex_idx_emission: Option<u16>,
-        tex_idx_attributes: Option<u16>,
+        tex_idx_roughness: Option<u16>,
+        tex_idx_coat: Option<u16>,
+        tex_idx_subsurface: Option<u16>,
+        tex_idx_metalness: Option<u16>,
+        tex_idx_specular_colour: Option<u16>,
+        tex_idx_specular_roughness: Option<u16>,
         emission_scale: EmissionScale,
-        refractive_index: Option<Range<f32>>,
+        coat_refractive_index: Option<Range<f32>>,
+        specular_refractive_index: Option<Range<f32>>,
         ty: MaterialType,
+        thin_walled: bool,
+        subsurface_weight: f32,
+        subsurface_anisotropy: f32,
     ) -> Self {
-        let tex_pos_1 = pack2xf16(tex_pos_1);
-        let tex_pos_2 = pack2xf16(tex_pos_2);
-        let tex_pos_3 = pack2xf16(tex_pos_3);
         let tex_pos_recolour = pack2xu16(tex_pos_recolour);
-        let idx = refractive_index.unwrap_or(refractive_indices::VACUUM);
+        let idx = coat_refractive_index.unwrap_or(refractive_indices::VACUUM);
+        let specular_idx = specular_refractive_index.unwrap_or(refractive_indices::VACUUM);
+
+        let subsurface_weight = (subsurface_weight.clamp(0.0, 1.0) * ((1 << 7) - 1) as f32) as u8;
+        let subsurface_anisotropy =
+            ((subsurface_anisotropy.clamp(-1.0, 1.0) * (i16::MAX as f32)) as i16).to_be_bytes();
+
         Self {
-            tex_pos_1,
-            tex_pos_2,
-            tex_pos_3,
             tex_pos_recolour,
-            tex_idx_diffuse_emission: pack2xu16([
-                tex_idx_diffuse,
+            tex_idx_base_colour_emission: pack2xu16([
+                tex_idx_base_colour,
                 map_optional_idx(tex_idx_emission),
             ]),
-            tex_idx_attributes_ty: pack2xu16([map_optional_idx(tex_idx_attributes), ty as u16]),
+            tex_idx_roughness_coat: pack2xu16([
+                map_optional_idx(tex_idx_roughness),
+                map_optional_idx(tex_idx_coat),
+            ]),
+            tex_idx_subsurface_metalness: pack2xu16([
+                map_optional_idx(tex_idx_subsurface),
+                map_optional_idx(tex_idx_metalness),
+            ]),
+            tex_idx_specular_colour_specular_rougness: pack2xu16([
+                map_optional_idx(tex_idx_specular_colour),
+                map_optional_idx(tex_idx_specular_roughness),
+            ]),
+            ty_thin_walled_subsurface: u32::from_ne_bytes([
+                ty as _,
+                subsurface_weight | (thin_walled as u8) << 7,
+                subsurface_anisotropy[0],
+                subsurface_anisotropy[1],
+            ]),
             emission_scale: emission_scale.pack(),
             refractive_index: pack2xf16([idx.start, idx.end]),
+            specular_refractive_index: pack2xf16([specular_idx.start, specular_idx.end]),
         }
     }
 }
@@ -191,12 +290,24 @@ impl Descriptor for [Material] {
     }
 }
 
+impl Descriptor for [TexturePositions] {
+    fn buffer_descriptor(&self, further_usages: BufferUsages) -> BufferInitDescriptor<'_> {
+        BufferInitDescriptor {
+            label: Some("Materials"),
+            contents: bytemuck::cast_slice(self),
+            usage: BufferUsages::STORAGE | further_usages,
+        }
+    }
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum MaterialType {
     /// A material the randomly bounces in a hemisphere
     Diffuse = 0,
     /// A material that always reflects
+    ///
+    /// Equivalent to diffuse with metalness forced to 1.
     Metallic = 1,
     /// A material that light passes through (mostly, some reflects)
     Transparent = 2,
@@ -235,16 +346,12 @@ impl DynamicRayTracer {
     pub fn create_pipeline<Opts: low_level::RayTracerOptions>(
         &self,
         blas_count: NonZeroU32,
-        diffuse_count: NonZeroU32,
-        emission_count: NonZeroU32,
-        attribute_count: NonZeroU32,
+        texture_count: NonZeroU32,
         options: &Opts,
     ) -> ComputePipeline {
         create_pipeline(
             blas_count,
-            diffuse_count,
-            emission_count,
-            attribute_count,
+            texture_count,
             options,
             self.shader
                 .shader_source_without_intersection_handler(options),
@@ -297,16 +404,12 @@ impl<S: RayTracingShader> RayTracer<S> {
     pub fn create_pipeline<Opts: low_level::RayTracerOptions>(
         &self,
         blas_count: NonZeroU32,
-        diffuse_count: NonZeroU32,
-        emission_count: NonZeroU32,
-        attribute_count: NonZeroU32,
+        texture_count: NonZeroU32,
         options: &Opts,
     ) -> ComputePipeline {
         create_pipeline(
             blas_count,
-            diffuse_count,
-            emission_count,
-            attribute_count,
+            texture_count,
             options,
             S::shader_source_without_intersection_handler(options),
             &self.device,
@@ -331,9 +434,7 @@ impl<S: RayTracingShader> RayTracer<S> {
 #[expect(clippy::too_many_arguments)]
 fn create_pipeline<Opts: low_level::RayTracerOptions>(
     blas_count: NonZeroU32,
-    diffuse_count: NonZeroU32,
-    emission_count: NonZeroU32,
-    attribute_count: NonZeroU32,
+    texture_count: NonZeroU32,
     options: &Opts,
     src: String,
     device: &Device,
@@ -345,9 +446,7 @@ fn create_pipeline<Opts: low_level::RayTracerOptions>(
     let pipeline_layout = low_level::pipeline_layout(
         device,
         blas_count,
-        diffuse_count,
-        emission_count,
-        attribute_count,
+        texture_count,
         extra_bgls,
     );
 

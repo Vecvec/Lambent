@@ -9,7 +9,7 @@ import package::bindings::{
     acc_struct,
     materials,
     material_idx,
-    tex_diffuse,
+    textures,
     sam,
     // functions
     unpack_2xu16,
@@ -18,6 +18,7 @@ import package::bindings::{
 };
 
 enable wgpu_ray_query;
+enable wgpu_binding_array;
 @if(vertex_return)
 enable wgpu_ray_vertex_return;
 
@@ -77,7 +78,7 @@ fn ray_hit(ray: Ray) -> Hit {
         if (intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE) {
             let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index]];
             let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
-            let tex_coords_float = fma(unpack2x16float(material.tex_pos_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_3) * bary.y)));
+            let tex_coords_float = fma(unpack2x16float(material.tex_pos_base_colour_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_base_colour_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_base_colour_3) * bary.y)));
             let idx_diffuse = unpack_2xu16(material.tex_idx_diffuse_emission).x;
             if (!near_zero(textureSampleLevel(tex_diffuse[idx_diffuse], sam, tex_coords_float, intersection.t).w)) {
                 rayQueryConfirmIntersection(&rq);

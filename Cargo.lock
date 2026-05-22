@@ -156,6 +156,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+dependencies = [
+ "bit-vec 0.9.1",
+]
+
+[[package]]
 name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -308,7 +317,7 @@ dependencies = [
  "image",
  "lambent",
  "oidn",
- "wgpu",
+ "wgpu 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -712,6 +721,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashbrown"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+dependencies = [
+ "foldhash 0.2.0",
+]
+
+[[package]]
 name = "hexf-parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -867,7 +885,7 @@ dependencies = [
  "image",
  "log",
  "wesl",
- "wgpu",
+ "wgpu 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1045,6 +1063,30 @@ dependencies = [
  "half",
  "hashbrown 0.16.0",
  "hexf-parse",
+ "indexmap",
+ "libm",
+ "log",
+ "num-traits",
+ "once_cell",
+ "rustc-hash",
+ "spirv",
+ "thiserror",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bitflags 2.9.0",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting",
+ "half",
+ "hashbrown 0.17.0",
  "indexmap",
  "libm",
  "log",
@@ -1786,7 +1828,7 @@ dependencies = [
  "hashbrown 0.16.0",
  "js-sys",
  "log",
- "naga",
+ "naga 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -1796,9 +1838,38 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core",
- "wgpu-hal",
- "wgpu-types",
+ "wgpu-core 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-hal 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-types 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "arrayvec",
+ "bitflags 2.9.0",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases",
+ "document-features",
+ "hashbrown 0.17.0",
+ "js-sys",
+ "log",
+ "naga 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "parking_lot",
+ "portable-atomic",
+ "profiling",
+ "raw-window-handle",
+ "smallvec",
+ "static_assertions",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu-core 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-hal 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-types 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1817,7 +1888,7 @@ dependencies = [
  "hashbrown 0.16.0",
  "indexmap",
  "log",
- "naga",
+ "naga 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell",
  "parking_lot",
  "portable-atomic",
@@ -1826,12 +1897,44 @@ dependencies = [
  "rustc-hash",
  "smallvec",
  "thiserror",
- "wgpu-core-deps-apple",
- "wgpu-core-deps-emscripten",
- "wgpu-core-deps-windows-linux-android",
- "wgpu-hal",
- "wgpu-naga-bridge",
- "wgpu-types",
+ "wgpu-core-deps-apple 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-core-deps-emscripten 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-core-deps-windows-linux-android 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-hal 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-naga-bridge 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-types 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu-core"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bit-vec 0.9.1",
+ "bitflags 2.9.0",
+ "bytemuck",
+ "cfg_aliases",
+ "document-features",
+ "hashbrown 0.17.0",
+ "indexmap",
+ "log",
+ "naga 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "once_cell",
+ "parking_lot",
+ "portable-atomic",
+ "profiling",
+ "raw-window-handle",
+ "rustc-hash",
+ "smallvec",
+ "thiserror",
+ "wgpu-core-deps-apple 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-core-deps-emscripten 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-core-deps-windows-linux-android 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-hal 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-naga-bridge 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-types 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1840,7 +1943,15 @@ version = "29.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43acd053312501689cd92a01a9638d37f3e41a5fd9534875efa8917ee2d11ac0"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu-core-deps-apple"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "wgpu-hal 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1849,7 +1960,15 @@ version = "29.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef043bf135cc68b6f667c55ff4e345ce2b5924d75bad36a47921b0287ca4b24a"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu-core-deps-emscripten"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "wgpu-hal 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1858,7 +1977,15 @@ version = "29.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "725d5c006a8c02967b6d93ef04f6537ec4593313e330cfe86d9d3f946eb90f28"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu-core-deps-windows-linux-android"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "wgpu-hal 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1886,7 +2013,7 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "naga",
+ "naga 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ndk-sys",
  "objc2 0.6.4",
  "objc2-core-foundation",
@@ -1908,10 +2035,63 @@ dependencies = [
  "wasm-bindgen",
  "wayland-sys",
  "web-sys",
- "wgpu-naga-bridge",
- "wgpu-types",
+ "wgpu-naga-bridge 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-types 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "wgpu-hal"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "android_system_properties",
+ "arrayvec",
+ "ash",
+ "bit-set 0.10.0",
+ "bitflags 2.9.0",
+ "block2",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases",
+ "glow",
+ "glutin_wgl_sys",
+ "gpu-allocator",
+ "gpu-descriptor",
+ "hashbrown 0.17.0",
+ "js-sys",
+ "khronos-egl",
+ "libc",
+ "libloading",
+ "log",
+ "naga 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "ndk-sys",
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
+ "once_cell",
+ "ordered-float",
+ "parking_lot",
+ "portable-atomic",
+ "portable-atomic-util",
+ "profiling",
+ "range-alloc",
+ "raw-window-handle",
+ "raw-window-metal",
+ "renderdoc-sys",
+ "smallvec",
+ "thiserror",
+ "wasm-bindgen",
+ "wayland-sys",
+ "web-sys",
+ "wgpu-naga-bridge 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-types 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "windows",
+ "windows-core",
+ "windows-result",
 ]
 
 [[package]]
@@ -1920,8 +2100,17 @@ version = "29.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0b8e1e505095f24cb4a578f04b1421d456257dca7fac114d9d9dd3d978c34b8"
 dependencies = [
- "naga",
- "wgpu-types",
+ "naga 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-types 29.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wgpu-naga-bridge"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "naga 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
+ "wgpu-types 29.0.0 (git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences)",
 ]
 
 [[package]]
@@ -1935,6 +2124,20 @@ dependencies = [
  "js-sys",
  "log",
  "raw-window-handle",
+ "web-sys",
+]
+
+[[package]]
+name = "wgpu-types"
+version = "29.0.0"
+source = "git+https://github.com/Vecvec/wgpu.git?branch=unlocked-fences#4264a466cca2b78407ce29110847d096e1226567"
+dependencies = [
+ "bitflags 2.9.0",
+ "bytemuck",
+ "js-sys",
+ "log",
+ "raw-window-handle",
+ "static_assertions",
  "web-sys",
 ]
 

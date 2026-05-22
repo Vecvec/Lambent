@@ -45,19 +45,49 @@ struct Camera {
     view_inverse: mat4x4<f32>,
 }
 
+struct TexturePositions {
+    tex_pos_base_colour_1: u32,
+    tex_pos_base_colour_2: u32,
+    tex_pos_base_colour_3: u32,
+    tex_pos_emission_1: u32,
+    tex_pos_emission_2: u32,
+    tex_pos_emission_3: u32,
+    tex_pos_attributes_1: u32,
+    tex_pos_attributes_2: u32,
+    tex_pos_attributes_3: u32,
+    tex_pos_coat_1: u32,
+    tex_pos_coat_2: u32,
+    tex_pos_coat_3: u32,
+    tex_pos_sub_surface_1: u32,
+    tex_pos_sub_surface_2: u32,
+    tex_pos_sub_surface_3: u32,
+    tex_pos_metalness_1: u32,
+    tex_pos_metalness_2: u32,
+    tex_pos_metalness_3: u32,
+    tex_pos_specular_1: u32,
+    tex_pos_specular_2: u32,
+    tex_pos_specular_3: u32,
+}
+
 struct Material {
-    tex_pos_1: u32,
-    tex_pos_2: u32,
-    tex_pos_3: u32,
     tex_pos_recolour: u32,
-    tex_idx_diffuse_emission: u32,
-    tex_idx_attributes_ty: u32,
+    tex_idx_base_colour_emission: u32,
+    tex_idx_roughness_coat: u32,
+    tex_idx_subsurface_metalness: u32,
+    tex_idx_specular_colour_specular_rougness: u32,
+    /// A combination of the following:
+    /// - The material type (8 bit unsigned int)
+    /// - Whether the geometry is thin walled (1 bit)
+    /// - The subsurface scattering wieght of the object (7 bit unsigned int)
+    /// - The subsurface anisotopy  (16 bit signed int)
+    ty_thin_walled_subsurface: u32,
     emission_scale: u32,
     refractive_index: u32,
+    specular_refractive_index: u32,
 }
 
 struct MaterialsIdx {
-    materials: array<u32>,
+    materials: array<array<u32, 2>>,
 }
 
 struct CompressedInfo {
@@ -67,17 +97,19 @@ struct CompressedInfo {
 @group(0) @binding(0)
 var<storage> materials: array<Material>;
 @group(0) @binding(1)
+var<storage> tex_pos: array<TexturePositions>;
+@group(0) @binding(2)
 var<storage> material_idx: binding_array<MaterialsIdx>;
 
 @if(vertex_return)
-@group(0) @binding(2)
+@group(0) @binding(3)
 var acc_struct: acceleration_structure<vertex_return>;
 
 @if(vertex_return)
 alias ray_query_maybe_vertex_return = ray_query<vertex_return>;
 
 @if(!vertex_return)
-@group(0) @binding(2)
+@group(0) @binding(3)
 var acc_struct: acceleration_structure;
 
 @if(!vertex_return)
@@ -87,7 +119,7 @@ struct Vertices {
 }
 
 @if(!vertex_return)
-@group(0) @binding(3)
+@group(0) @binding(4)
 var<storage> vertices: binding_array<Vertices>;
 
 @if(!vertex_return)
@@ -96,7 +128,7 @@ struct Indices {
 }
 
 @if(!vertex_return)
-@group(0) @binding(4)
+@group(0) @binding(5)
 var<storage> indices: binding_array<Indices>;
 
 @if(!vertex_return)
@@ -140,13 +172,8 @@ var<storage> old_world_markov_chains: array<WorldMarcovChainState>;
 @group(2) @binding(0)
 var sam:sampler;
 @group(2) @binding(1)
-var tex_diffuse: binding_array<texture_2d<f32>>;
+var textures: binding_array<texture_2d<f32>>;
 @group(2) @binding(2)
-var tex_emission: binding_array<texture_2d<f32>>;
-@group(2) @binding(3)
-// r: roughness
-var tex_attributes: binding_array<texture_2d<f32>>;
-@group(2) @binding(4)
 var tex_recolour: texture_2d<f32>;
 
 fn unpack_2xu16(u:u32) -> vec2<u32> {

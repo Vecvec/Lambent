@@ -46,7 +46,8 @@ impl SpatialResampling {
                 (true, false) => include_wesl!("spatial_resampling_true_false"),
                 (false, true) => include_wesl!("spatial_resampling_false_true"),
                 (false, false) => include_wesl!("spatial_resampling_false_false"),
-            }.to_string(),
+            }
+            .to_string(),
             #[cfg(debug_assertions)]
             label: "Spatial Resampler",
         }
@@ -181,7 +182,10 @@ pub struct ResamplingOptions {
 
 impl Default for ResamplingOptions {
     fn default() -> Self {
-        Self { apply_to_image: true, update_path_guiding: false }
+        Self {
+            apply_to_image: true,
+            update_path_guiding: false,
+        }
     }
 }
 

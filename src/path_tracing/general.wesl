@@ -1,4 +1,4 @@
-import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx };
+import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx, pick_ref_idx_blend };
 import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, grid_loc, grid_load, grid_store_markov_chain, strip_NaN_vec3, normalised_to_u32, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, CACHE_TIMEOUT, };
 import package::bindings::{
     // Types
@@ -20,10 +20,9 @@ import package::bindings::{
     acc_struct,
     materials,
     material_idx,
-    tex_diffuse,
-    tex_emission,
-    tex_attributes,
+    textures,
     tex_recolour,
+    tex_pos,
     bg,
     sam,
     info,
@@ -44,33 +43,9 @@ import package::path_tracing::weighted_reservoir_sampling;
 import package::bindings::{ get_vertices, };
 
 enable wgpu_ray_query;
+enable wgpu_binding_array;
 @if(vertex_return)
 enable wgpu_ray_vertex_return;
-
-const BOUNCES = 5u;
-const VERTICES = BOUNCES + 1u;
-
-struct Ray {
-    direction: vec3f,
-    origin: vec3f,
-}
-
-struct Intersection {
-    color: vec3f,
-    t: f32,
-    emission: vec3f,
-    ty: u32,
-    normal: vec3f,
-    front_face: bool,
-    tangent: vec3<f32>,
-    hit: bool,
-    tri_area: f32,
-    roughness: vec2<f32>,
-    roughness_transparent: vec2<f32>,
-    refractive_index_low: f32,
-    refractive_index_high: f32,
-}
-
 
 // WIP: Importance sampling
 
@@ -482,7 +457,6 @@ struct DiffuseReturn {
 
 struct PickedRefIdx {
     picked_idx: f32,
-    picked: bool,
 }
 
 struct RISDirections {
@@ -500,61 +474,56 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     sample.ty = SKY;
     camera_loc = ray.origin;
     sample.pdf = 1.0;
-    var previously_diffuse = false;
+    var hit_state = HitState();
     var previous_brightness = 0.0;
     // like i but only starts counting after first diffuse surface or any surface that has a roughness > 0.2
     var i_diffuse = 0u;
     var accum_emission = vec3<f32>();
     var accum_albedo = vec3<f32>(1.0);
     var picked = PickedRefIdx();
-    var last_normal: vec3<f32>;
-    var cached_pdf: f32;
-    var cached_brdf: f32;
     var last_not_vmf = false;
     var vmf_weight = 1.0;
     let start_dir = ray.direction;
-    var first_dir: vec3<f32>;
-    var last_dir: vec3<f32>;
-    var first_pdf: f32;
-    var dbg_out: vec3<f32>;
 
     let mc_chain = tentative_marcov_chain_state;
 
     var last_diffuse = false;
+    let mul = pick_ref_idx_blend(&picked, self_seed);
+    
+    color *= mul;
+    out_radiance_colour *= mul;
+
     for (var i = 0u; i < BOUNCES; i++) {
         let intersection = ray_hit(&ray);
         if (intersection.hit) {
             let new_pos = at(&ray, intersection.t);
             // We have at least hit the scene twice (this is our second time)
             if i != 0u {
-                let radiance_reflected = strip_NaN_vec3((intersection.color * grid_load_radiance_estimate(new_pos, intersection.normal, ray.direction)) * cached_brdf);
-                let radiance_out = (intersection.emission * cached_brdf);
-                grid_add_radiance(ray.origin, last_normal, last_dir, (radiance_out + radiance_reflected) / cached_pdf);
+                let radiance_reflected = strip_NaN_vec3((intersection.color_base * grid_load_radiance_estimate(new_pos, intersection.normal, ray.direction)) * hit_state.cached_brdf);
+                let radiance_out = (intersection.emission * hit_state.cached_brdf);
+                grid_add_radiance(ray.origin, hit_state.last_normal, hit_state.last_dir, (radiance_out + radiance_reflected) / hit_state.cached_pdf);
                 let weight = length((radiance_reflected) + radiance_out);
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
-                    grid_store_markov_chain(ray.origin, last_normal, last_dir, camera_loc, state);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
+                    grid_store_markov_chain(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, state);
                     self_seed++;
                 }
-                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission), self_seed, last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
+                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission), self_seed, hit_state.last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
             }
-            last_normal = intersection.normal;
-            last_dir = ray.direction;
-            last_not_vmf = false;
-            last_diffuse = false;
+            hit_state.last_normal = intersection.normal;
+            hit_state.last_dir = ray.direction;
+            hit_state.last_not_vmf = false;
+            hit_state.last_diffuse = false;
             ray.origin = new_pos;
-            accum_emission = fma(intersection.emission, accum_albedo, accum_emission);
-            accum_albedo *= intersection.color;
+
             if (i == 0u) {
                 sample.point = ray.origin;
-                sample.emission = accum_emission;
                 sample.ty = intersection.ty;
                 //sample.roughness = intersection.roughness;
                 sample.normal = intersection.normal;
-                sample.albedo = accum_albedo;
             } else if (i == 1u) {
                 // dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.5, 1.0, 0.5) - camera_loc)) / 500.0);
-                dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.62, 0.66, 0.44) - camera_loc)) / 100.0);
+                // dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.62, 0.66, 0.44) - camera_loc)) / 100.0);
                 sample.visible_point = ray.origin;
                 sample.visible_normal = intersection.normal;
             }
@@ -568,213 +537,26 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 //sample.color = vec3f(intersection.tri_area);
                 //return sample;
             }*/
-            sample.color = fma(color, intersection.emission, sample.color);
+            
+            let hit = handle_hit(&hit_state, i, intersection, &ray, &sample, &picked, &self_seed);
+            
+            sample.color = fma(color, hit.emission, sample.color);
             if (!(i == 0u)) {
-                sample.out_radiance = fma(out_radiance_colour, intersection.emission, sample.out_radiance);
-            }
-            let assign_normal = get_normal(ray.direction, intersection.normal, intersection.tangent, self_seed, intersection.roughness);
-            let transparent_normal = get_normal(ray.direction, intersection.normal, intersection.tangent, self_seed, intersection.roughness_transparent);
-            var normal = transparent_normal;
-            // if not reset this will cary the last loop's should_reflect
-            var should_reflect = false;
-
-            self_seed = self_seed + 1u;
-            let colour_refractive_index = pick_ref_idx(&picked, intersection.refractive_index_low, intersection.refractive_index_high, self_seed);
-            var refractive_index = colour_refractive_index.w;
-            self_seed = self_seed + 1u;
-            if ((!intersection.front_face) && intersection.ty == TRANSPARENT) {
-                refractive_index = refractive_index;
-            } else {
-                refractive_index = 1.0 / refractive_index;
-            }
-            color *= colour_refractive_index.xyz;
-            out_radiance_colour *= colour_refractive_index.xyz;
-            if (refractive_index != 1.0) {
-                let cos_theta = min(dot(-ray.direction, normal), 1.0);
-                let sin_theta = sqrt(1.0 - (cos_theta*cos_theta));
-                let cannot_refract = (refractive_index * sin_theta) > 1.0;
-                // REMEMBER: Looking from inside a material looks odd, but this seems to be correct.
-                let pdf = reflectance(cos_theta, refractive_index);
-                let rand = rand_f32(self_seed);
-                if ((cannot_refract || (pdf > rand))) {
-                    //sample.pdf *= select(pdf, 1.0, cannot_refract);
-                    should_reflect = true;
-                    //sample.color = vec3f(f32(cannot_refract));
-                    //return sample;
-                }
-                //sample.pdf *= (1.0 - pdf);
-                self_seed = self_seed + 1u;
-                //sample.color = vec3f(reflectance(cos_theta, refractive_index));
+                sample.out_radiance = fma(out_radiance_colour, hit.emission, sample.out_radiance);
             }
 
-            if ((!should_reflect) || (intersection.ty == TRANSPARENT)) {
-                color = color * intersection.color;
-                if (!(i == 0u)) {
-                    out_radiance_colour = out_radiance_colour * intersection.color;
-                }
+            // sample.color = vec3(intersection.metalness);
+            // return sample;
+
+            color *= hit.albedo;
+            if (!(i == 0u)) {
+                out_radiance_colour *= hit.albedo;
             }
 
-            if (!should_reflect) {
-                normal = assign_normal;
-                self_seed = self_seed + 1u;
-            }
-            fill_mc_world_space_states(&self_seed, ray.origin, intersection.normal, ray.direction);
-            var s = resample_mcmm(&self_seed, ray.origin, intersection.normal);
-
-            //sample.color = (normal);
-            //return sample;
-            //sample.color = color;
-            //return sample;
-            let reflecting = should_reflect || intersection.ty == METALLIC;
-            if (!reflecting) {
-                if (intersection.ty == DIFFUSE) {
-                    last_diffuse = true;
-                    // old direction code
-                    /*let direction = rand_on_sphere(self_seed);
-                    let dot = dot(direction, intersection.normal);
-                    color = color * abs(dot);
-                    if (dot < 0.0) {
-                        ray.direction = -direction;
-                    } else {
-                        ray.direction = direction;
-                    }*/
-                    var dir: vec3<f32>;
-                    // var wrs = weighted_reservoir_sampling::WRS_vec4f();
-                    // Prepare for markov chain
-                    //s.light_source = vec3<f32>(0.0, 1.0, 0.0);
-                    let light_dir = get_light_dir(s, ray.origin);
-                    let mean = normalize(light_dir);
-                    let kappa = get_kappa(s);
-                    // Calculate cosine direction
-                    let dir_cosine = cosine_weighted_hemisphere(self_seed, intersection.normal, intersection.tangent);
-                    let cosine_pdf = max(dot(dir_cosine, intersection.normal) / PI, 0.0);
-                    // let cosine_weight = 0.2;
-                    // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_cosine, cosine_pdf), cosine_weight, &self_seed);
-                    // Calculate markov chain direction
-                    let theta = rand_f32(self_seed) * TAU;
-                    let V = vec2<f32>(cos(theta), sin(theta));
-                    self_seed = self_seed + 1u;
-                    let xi = rand_f32(self_seed);
-                    self_seed = self_seed + 1u;
-                    let minus_2_kappa = -2.0 * kappa;
-                    let W_minus_1 = ((log(1.0 + (xi * exp_minus_one(minus_2_kappa))) / kappa));
-                    var W = 1.0 + W_minus_1;
-                    // slightly more precise than `sqrt(1.0 - (W*W))`
-                    let norm_V = sqrt(-fma(W_minus_1, W_minus_1, 2*W_minus_1));
-                    let Xs = from_onb_no_tangent(vec3(strip_NaN(V.x * norm_V), W, strip_NaN(V.y * norm_V)), mean);
-                    let dir_markov = normalize(Xs);
-                    // Calculate pdf of cosine for cosine direction
-                    var unnormalied_confidences = array<f32, 2>(0.5, 0.5);
-                    //var unnormalied_confidences = array<f32, 2>(0.8 , 0.2);
-                    if (!marcov_chain_valid(s) || near_zero(length(light_dir)) || near_zero(s.weight_sum) || near_zero(length(Xs))) {
-                        unnormalied_confidences[0] = 1.0;
-                        unnormalied_confidences[1] = 0.0;
-                    }
-                    let confidence_sum = unnormalied_confidences[0] + unnormalied_confidences[1];
-                    var confidences = array<f32, 2>(unnormalied_confidences[0] / confidence_sum, unnormalied_confidences[1] / confidence_sum);
-
-                    // var markov_weight = confidences[1];
-                    // if dot(dir_markov, intersection.normal) < 0.0 {
-                    //     //markov_weight = 0.0;
-                    // }
-                    // let markov_chain_pdf = select(all_vmf_pdfs(ray.origin, dir), 0.0, confidences[1] == 0.0);
-                    // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_markov, markov_chain_pdf), markov_weight, &self_seed);
-                    var final_pdf: f32;
-                    var norm_divisor = 1.0;
-                    let weight = confidences[0];
-                    let rand = rand_f32(self_seed);
-                    self_seed = self_seed + 1u;
-                    if (rand < weight) {
-                        dir = dir_cosine;
-                        //final_pdf = max(dot(dir, intersection.normal) / PI, 0.0);
-                        last_not_vmf = true;
-                    } else {
-                        dir = (dir_markov);
-                        //final_pdf = vmf_pdf(mean, kappa, dir_markov);
-                        //sample.color = (dir_markov + 1) / 2;
-                        //return sample;
-                    }
-                    let avg_pdf = ((confidences[0] * cosine_pdf) + select(confidences[1] * max(all_vmf_pdfs(ray.origin, dir), 0.0), 0.0, confidences[1] == 0.0));
-
-                    // let avg_pdf = (wrs.current_weight / wrs.weight_sum) * wrs.current_elem.w;
-                    // let avg_pdf = cosine_pdf * (cosine_weight / wrs.weight_sum) + markov_chain_pdf * (markov_weight / wrs.weight_sum);
-                    // dir = wrs.current_elem.xyz;
-                    final_pdf = avg_pdf;
-                    norm_divisor = avg_pdf;
-                    //vmf_weight *= avg_pdf;
-                    //final_pdf = 1.0;
-                    // Calculate final pdf
-                    let diffuse = make_diffuse(intersection.color, ray, intersection.normal, intersection.tangent, intersection.roughness.x, dir);
-                    //let dot = max(dot(dir, normal), 0.0) / dot(dir, intersection.normal);
-                    //color = color * dot;
-                    //ray.direction = dir;
-                    if (any(strip_NaN_vec3(dir) != dir)) {
-                        //sample.color = vec3f(0.0, 1.0, 0.0);
-                        //return sample;
-                    }
-                    cached_pdf = final_pdf;
-                    if i == 0u {
-                        first_pdf = cached_pdf;
-                    }
-                    cached_brdf = max(dot((dir), intersection.normal) / PI, 0.0);
-                    let normalization_factor = (abs(cached_brdf)) / max(norm_divisor, 0.001);
-                    color = color * normalization_factor * diffuse;
-                    out_radiance_colour = out_radiance_colour * normalization_factor * diffuse;
-                    if (!(i == 0u)) {
-                        
-                    }
-                    ray.direction = dir;
-                    previously_diffuse = true;
-                    if (i == 0) {
-                        sample.pdf = final_pdf;
-                    }
-                    //sample.color = vec3f((diffuse.w));
-                    //sample.color = ray.direction;
-                    //return sample;
-                } else if (intersection.ty == TRANSPARENT) {
-                    cached_pdf = 1.0;
-                    cached_brdf = 1.0;
-                    if i == 0u {
-                        first_pdf = cached_pdf;
-                    }
-                    //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
-                    ray.direction = refract(ray.direction, normal, refractive_index);
-                    let dot = dot(-ray.direction, intersection.normal);
-                    if (dot < 0.0) {
-                        //sample.color = vec3f(1.0);
-                        //return sample;
-                    }
-                    //sample.color = vec3f(sign(k), -sign(k), sign(dot(intersection.normal, ray.direction)));
-                    //sample.color = vec3f((refractive_index * refractive_index) / 8.0, (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)), f32((1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)) > 0.25));
-                    //sample.color = -normal;
-                    //return sample;
-                }
-            } else {
-                cached_pdf = 1.0;
-                cached_brdf = 1.0;
-                if i == 0u {
-                    first_pdf = cached_pdf;
-                }
-                ray.direction = reflect(ray.direction, normal);
-                let dot = dot(ray.direction, intersection.normal);
-                if (dot < 0.0) {
-                    // if we would have hit the surface again, bounce off the hit surface
-                    ray.direction = reflect(ray.direction, intersection.normal);
-                }
-                //sample.color = -normal;
-                //sample.color = vec3f(1.0);
-                //return sample;
-            }
-            if (((intersection.ty == DIFFUSE) && !reflecting) || (i_diffuse != 0u)) {
-
-            }
-            i_diffuse++;
-            if (ray.direction.x == 0.0 && ray.direction.y == 0.0 && ray.direction.z == 0.0) {
-                //sample.color = vec3f(1.0);
-                //return sample;
-            }
             if i == 0 {
-                first_dir = ray.direction;
+                hit_state.first_dir = ray.direction;
+                sample.albedo = hit.albedo;
+                sample.emission = hit.emission;
             }
             //sample.color = ray.direction;
             //return sample;
@@ -790,12 +572,12 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 sample.out_radiance = fma(out_radiance_colour, bg_color, sample.out_radiance);
 
                 // update markov chains
-                let radiance_out = (bg_color * cached_brdf);
-                grid_add_radiance(ray.origin, last_normal, last_dir, radiance_out / cached_pdf);
+                let radiance_out = (bg_color * hit_state.cached_brdf);
+                grid_add_radiance(ray.origin, hit_state.last_normal, hit_state.last_dir, radiance_out / hit_state.cached_pdf);
                 let weight = length(radiance_out);
                 if weight > 0.0 {
-                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, last_normal, last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
-                    grid_store_markov_chain(ray.origin, last_normal, last_dir, camera_loc, state);
+                    let state = update_marcov_state(ray.origin, new_pos, weight, self_seed, false, grid_load(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, false), 1.0, sum_mc, NUM_RESAMPLES);
+                    grid_store_markov_chain(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, state);
                     tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, false, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
                     self_seed++;
                 }
@@ -808,7 +590,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     // A final train of the markov chain with the real radiance
     //sample.out_radiance = (sample.color - sample.emission) / sample.albedo;
     let world_cache = grid_load(sample.point, sample.normal, start_dir, camera_loc, false);
-    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance) * first_pdf, self_seed, false, world_cache, 1.0, sum_mc, NUM_RESAMPLES);
+    let state = update_marcov_state(sample.point, sample.visible_point, length(sample.out_radiance) * hit_state.first_pdf, self_seed, false, world_cache, 1.0, sum_mc, NUM_RESAMPLES);
     grid_store_markov_chain(sample.point, sample.normal, start_dir, camera_loc, state);
     // Sometimes the radiance cache can be a little off (especially on reflections), this fixes it.
     grid_add_radiance(sample.point, sample.normal, start_dir, sample.out_radiance);
@@ -844,6 +626,289 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
     //sample.color = strip_NaN_vec3(sample.color);
     sample.valid = true;//(i_diffuse > 1u);
     return sample;
+}
+
+struct FinalizedHit {
+    albedo: vec3<f32>,
+    emission: vec3<f32>,
+}
+
+fn FinalizedHit_new() -> FinalizedHit {
+    return FinalizedHit(vec3(1.0), vec3(0.0));
+}
+
+struct RefractionChecks {
+    cos: f32,
+    cannot_refract: bool,
+}
+
+fn check_refract(dir: vec3<f32>, normal: vec3<f32>, refractive_index: f32) -> RefractionChecks {
+    let cos_theta = min(dot(-dir, normal), 1.0);
+    let sin_theta = sqrt(1.0 - (cos_theta*cos_theta));
+    let cannot_refract = (refractive_index * sin_theta) > 1.0;
+    return RefractionChecks(cos_theta, cannot_refract);
+}
+
+// The multibounce hit state.
+//
+// A collection of various things that can be zeroed.
+struct HitState {
+    first_dir: vec3<f32>,
+    last_normal: vec3<f32>,
+    cached_pdf: f32,
+    cached_brdf: f32,
+    last_dir: vec3<f32>,
+    first_pdf: f32,
+    last_not_vmf: bool,
+    last_diffuse: bool,
+    previously_diffuse: bool,
+}
+
+fn handle_hit(
+    state: ptr<function, HitState>,
+    bounce_idx: u32,
+    intersection: Intersection,
+    ray: ptr<function, Ray>,
+    sample: ptr<function, SampleReturn>,
+    picked: ptr<function, PickedRefIdx>,
+    self_seed: ptr<function, u32>,
+) -> FinalizedHit {
+    var roughness = intersection.roughness_specular;
+    var hit = FinalizedHit_new();
+    
+    // coated-base
+
+    // First, possibly skip this
+    var skip_coated_base: bool;
+    {
+        let rand = rand_f32_ptr(self_seed);
+        skip_coated_base = rand > intersection.color_coat.w;
+    }
+
+    var to_base_substrate = true;
+    let colour_refractive_index = pick_ref_idx(picked, intersection.refractive_index_low, intersection.refractive_index_high, *self_seed);
+    var refractive_index = colour_refractive_index;
+    *self_seed = *self_seed + 1u;
+    if (!intersection.front_face && intersection.ty == TRANSPARENT) {
+        // disable the coat reflection if we are exiting a coated transparent
+        refractive_index = 1.0;
+    } else {
+        refractive_index = 1.0 / refractive_index;
+    }
+
+    let coat_normal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, roughness);
+    var reflect_normal = coat_normal;
+
+    if (refractive_index != 1.0) {
+        let checks = check_refract((*ray).direction, coat_normal, refractive_index);
+        // REMEMBER: Looking from inside a material looks odd, but this seems to be correct.
+        let pdf = reflectance(checks.cos, refractive_index);
+        let rand = rand_f32_ptr(self_seed);
+        if ((checks.cannot_refract || (pdf > rand))) {
+            roughness = intersection.roughness_coat;
+            to_base_substrate = false;
+        }
+    }
+
+    to_base_substrate = to_base_substrate || skip_coated_base;
+
+    if to_base_substrate {
+        hit.albedo *= mix(vec3(1.0), intersection.color_coat.xyz, intersection.color_coat.w);
+        hit.emission = fma(intersection.emission, hit.albedo, hit.emission);
+    }
+
+    // Mostly checking if base-substrate is metal, but also a bit of coated base
+    // to prevent quite so many branches
+
+    var is_metal = intersection.ty == METALLIC;
+
+    {
+        let rand = rand_f32_ptr(self_seed);
+        is_metal = is_metal || (rand < intersection.metalness);
+    }
+
+    // Don't want to be metal if we should be reflecting off the coat.
+    is_metal = is_metal && to_base_substrate;
+
+    var specular_refractive_index = pick_ref_idx(picked, intersection.specular_refractive_index_low, intersection.specular_refractive_index_high, *self_seed);
+    *self_seed = *self_seed + 1u;
+    // Don't have to if it is thin walled as front_face is always true in this case.
+    if (!intersection.front_face && intersection.ty == TRANSPARENT) {
+        specular_refractive_index = specular_refractive_index;
+    } else {
+        specular_refractive_index = 1.0 / specular_refractive_index;
+    }
+    
+    var to_base = true;
+    if is_metal {
+        reflect_normal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, intersection.roughness_specular);
+        let F_0 = intersection.color_base.xyz;
+        let cos: f32 = min(dot(-(*ray).direction, reflect_normal), 1.0);
+        let one_minus_cos = 1.0 - cos;
+        let F_Schlick = F_0 + ((1.0 - F_0) * pow(one_minus_cos, 5.0));
+        const REWEIGHT_COS = 1.0 / 7.0;
+        const REWEIGHT = REWEIGHT_COS * pow(1.0 - REWEIGHT_COS, 6.0);
+        const REWEIGHT_COS_Pow5 = pow(1.0 - REWEIGHT_COS, 5.0);
+        let F_Schlick_1_7 = F_0 + ((1.0 - F_0) * REWEIGHT_COS_Pow5);
+        let F = intersection.color_specular.xyz * F_Schlick_1_7;
+        let F_82 = F_Schlick - (((cos * pow(1.0 - cos, 6.0)) / REWEIGHT) * (F_Schlick_1_7 - F));
+
+        hit.albedo *= F_82 * intersection.color_specular.w;
+    } else {
+        let specular_normal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, intersection.roughness_specular);
+    
+        if (specular_refractive_index != 1.0) {
+            let checks = check_refract((*ray).direction, specular_normal, specular_refractive_index);
+            // REMEMBER: Looking from inside a material looks odd, but this seems to be correct.
+            let pdf = reflectance(checks.cos, specular_refractive_index);
+            let rand = rand_f32_ptr(self_seed);
+            if ((checks.cannot_refract || (pdf > rand))) {
+                reflect_normal = specular_normal;
+                to_base = false;
+                hit.albedo *= intersection.color_specular.xyz;
+            }
+        }
+    }
+
+    if is_metal || !to_base_substrate || !to_base {
+        (*state).cached_pdf = 1.0;
+        (*state).cached_brdf = 1.0;
+        if bounce_idx == 0u {
+            (*state).first_pdf = (*state).cached_pdf;
+        }
+        (*ray).direction = reflect((*ray).direction, reflect_normal);
+
+        return hit;
+    }
+
+    fill_mc_world_space_states(self_seed, (*ray).origin, intersection.normal, (*ray).direction);
+    var s = resample_mcmm(self_seed, (*ray).origin, intersection.normal);
+
+    //sample.color = (normal);
+    //return sample;
+    //sample.color = color;
+    //return sample;
+
+    hit.albedo *= intersection.color_base.xyz;
+
+    if (intersection.ty == DIFFUSE) {
+        (*state).last_diffuse = true;
+        // old direction code
+        /*let direction = rand_on_sphere(self_seed);
+        let dot = dot(direction, intersection.normal);
+        color = color * abs(dot);
+        if (dot < 0.0) {
+            ray.direction = -direction;
+        } else {
+            ray.direction = direction;
+        }*/
+        var dir: vec3<f32>;
+        // var wrs = weighted_reservoir_sampling::WRS_vec4f();
+        // Prepare for markov chain
+        //s.light_source = vec3<f32>(0.0, 1.0, 0.0);
+        let light_dir = get_light_dir(s, (*ray).origin);
+        let mean = normalize(light_dir);
+        let kappa = get_kappa(s);
+        // Calculate cosine direction
+        let dir_cosine = cosine_weighted_hemisphere(*self_seed, intersection.normal, intersection.tangent);
+        let cosine_pdf = max(dot(dir_cosine, intersection.normal) / PI, 0.0);
+        // let cosine_weight = 0.2;
+        // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_cosine, cosine_pdf), cosine_weight, &self_seed);
+        // Calculate markov chain direction
+        let theta = rand_f32_ptr(self_seed) * TAU;
+        let V = vec2<f32>(cos(theta), sin(theta));
+        let xi = rand_f32_ptr(self_seed);
+        let minus_2_kappa = -2.0 * kappa;
+        let W_minus_1 = ((log(1.0 + (xi * exp_minus_one(minus_2_kappa))) / kappa));
+        var W = 1.0 + W_minus_1;
+        // slightly more precise than `sqrt(1.0 - (W*W))`
+        let norm_V = sqrt(-fma(W_minus_1, W_minus_1, 2*W_minus_1));
+        let Xs = from_onb_no_tangent(vec3(strip_NaN(V.x * norm_V), W, strip_NaN(V.y * norm_V)), mean);
+        let dir_markov = normalize(Xs);
+        // Calculate pdf of cosine for cosine direction
+        var unnormalied_confidences = array<f32, 2>(0.5, 0.5);
+        //var unnormalied_confidences = array<f32, 2>(0.8 , 0.2);
+        if (!marcov_chain_valid(s) || near_zero(length(light_dir)) || near_zero(s.weight_sum) || near_zero(length(Xs))) {
+            unnormalied_confidences[0] = 1.0;
+            unnormalied_confidences[1] = 0.0;
+        }
+        let confidence_sum = unnormalied_confidences[0] + unnormalied_confidences[1];
+        var confidences = array<f32, 2>(unnormalied_confidences[0] / confidence_sum, unnormalied_confidences[1] / confidence_sum);
+
+        // var markov_weight = confidences[1];
+        // if dot(dir_markov, intersection.normal) < 0.0 {
+        //     //markov_weight = 0.0;
+        // }
+        // let markov_chain_pdf = select(all_vmf_pdfs(ray.origin, dir), 0.0, confidences[1] == 0.0);
+        // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_markov, markov_chain_pdf), markov_weight, &self_seed);
+        var final_pdf: f32;
+        var norm_divisor = 1.0;
+        let weight = confidences[0];
+        let rand = rand_f32_ptr(self_seed);
+        if (rand < weight) {
+            dir = dir_cosine;
+            //final_pdf = max(dot(dir, intersection.normal) / PI, 0.0);
+            (*state).last_not_vmf = true;
+        } else {
+            dir = (dir_markov);
+            //final_pdf = vmf_pdf(mean, kappa, dir_markov);
+            //sample.color = (dir_markov + 1) / 2;
+            //return sample;
+        }
+        let avg_pdf = ((confidences[0] * cosine_pdf) + select(confidences[1] * max(all_vmf_pdfs((*ray).origin, dir), 0.0), 0.0, confidences[1] == 0.0));
+
+        // let avg_pdf = (wrs.current_weight / wrs.weight_sum) * wrs.current_elem.w;
+        // let avg_pdf = cosine_pdf * (cosine_weight / wrs.weight_sum) + markov_chain_pdf * (markov_weight / wrs.weight_sum);
+        // dir = wrs.current_elem.xyz;
+        final_pdf = avg_pdf;
+        norm_divisor = avg_pdf;
+        //vmf_weight *= avg_pdf;
+        //final_pdf = 1.0;
+        // Calculate final pdf
+        let diffuse = make_diffuse(intersection.color_base, (*ray), intersection.normal, intersection.tangent, intersection.roughness.x, dir);
+        //let dot = max(dot(dir, normal), 0.0) / dot(dir, intersection.normal);
+        //color = color * dot;
+        //ray.direction = dir;
+        if (any(strip_NaN_vec3(dir) != dir)) {
+            //sample.color = vec3f(0.0, 1.0, 0.0);
+            //return sample;
+        }
+        (*state).cached_pdf = final_pdf;
+        if bounce_idx == 0u {
+            (*state).first_pdf = (*state).cached_pdf;
+        }
+        (*state).cached_brdf = max(dot((dir), intersection.normal) / PI, 0.0);
+        let normalization_factor = (abs((*state).cached_brdf)) / max(norm_divisor, 0.001);
+        hit.albedo *= normalization_factor * diffuse;
+
+        (*ray).direction = dir;
+        (*state).previously_diffuse = true;
+        if (bounce_idx == 0) {
+            (*sample).pdf = final_pdf;
+        }
+        //sample.color = vec3f((diffuse.w));
+        //sample.color = ray.direction;
+        //return sample;
+    } else if (intersection.ty == TRANSPARENT) {
+        (*state).cached_pdf = 1.0;
+        (*state).cached_brdf = 1.0;
+        if bounce_idx == 0u {
+            (*state).first_pdf = (*state).cached_pdf;
+        }
+        //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
+        if !intersection.thin_walled { (*ray).direction = refract((*ray).direction, reflect_normal, specular_refractive_index); }
+        let dot = dot(-(*ray).direction, intersection.normal);
+
+        if (dot < 0.0) {
+            //sample.color = vec3f(1.0);
+            //return sample;
+        }
+        //sample.color = vec3f(sign(k), -sign(k), sign(dot(intersection.normal, ray.direction)));
+        //sample.color = vec3f((refractive_index * refractive_index) / 8.0, (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)), f32((1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)) > 0.25));
+        //sample.color = -normal;
+        //return sample;
+    }
+    return hit;
 }
 
 fn u32_to_colour(u:u32) -> vec3<f32> {
@@ -921,6 +986,41 @@ fn x_divided_by_exp_minus_one(x:f32) -> f32 {
 override T_MIN:f32;
 override T_MAX:f32;
 
+
+const BOUNCES = 5u;
+const VERTICES = BOUNCES + 1u;
+
+struct Ray {
+    direction: vec3f,
+    origin: vec3f,
+}
+
+struct Intersection {
+    color_base: vec3f,
+    hit: bool,
+    emission: vec3f,
+    // Always true if thin walled is on - both sides are the "front"
+    front_face: bool,
+    color_coat: vec4f,
+    color_subsurface: vec3f,
+    ty: u32,
+    normal: vec3f,
+    thin_walled: bool,
+    tangent: vec3<f32>,
+    subsurface_anisotropy: f32,
+    roughness: vec2<f32>,
+    roughness_coat: vec2<f32>,
+    refractive_index_low: f32,
+    refractive_index_high: f32,
+    specular_refractive_index_low: f32,
+    specular_refractive_index_high: f32,
+    subsurface_weight: f32,
+    t: f32,
+    metalness: f32,
+    roughness_specular: vec2<f32>,
+    color_specular: vec4f,
+}
+
 fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
     var rq: ray_query_maybe_vertex_return;
     rayQueryInitialize(&rq, acc_struct, RayDesc(0u, 0xFFu, T_MIN, T_MAX, (*ray).origin, (*ray).direction));
@@ -929,12 +1029,13 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
     while (rayQueryProceed(&rq)) {
         let intersection = rayQueryGetCandidateIntersection(&rq);
         if (intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE) {
-            let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index]];
+            let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index][0]];
+            let texture_pos = tex_pos[material_idx[intersection.instance_index].materials[intersection.primitive_index][1]];
             let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
-            let tex_coords_float = fma(unpack2x16float(material.tex_pos_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_3) * bary.y)));
-            let idx_diffuse = unpack_2xu16(material.tex_idx_diffuse_emission).x;
-            let idx_attributes_ty = unpack_2xu16(material.tex_idx_attributes_ty);
-            if (!near_zero(textureSampleLevel(tex_diffuse[idx_diffuse], sam, tex_coords_float, intersection.t).w) || idx_attributes_ty.y == TRANSPARENT) {
+            let tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_base_colour_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_base_colour_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_base_colour_3) * bary.y)));
+            let idx_diffuse = unpack_2xu16(material.tex_idx_base_colour_emission).x;
+            let ty = unpack4xU8(material.ty_thin_walled_subsurface).x;
+            if (!near_zero(textureSampleLevel(textures[idx_diffuse], sam, tex_coords_float, intersection.t).w) || ty == TRANSPARENT) {
                 rayQueryConfirmIntersection(&rq);
             }
         } else if (intersection.kind == RAY_QUERY_INTERSECTION_AABB) {
@@ -955,13 +1056,29 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         return_intersection.t = intersection.t;
         return_intersection.front_face = intersection.front_face;
 
-        let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index]];
-        let idx_diffuse_emission = unpack_2xu16(material.tex_idx_diffuse_emission);
-        let idx_attributes_ty = unpack_2xu16(material.tex_idx_attributes_ty);
-        return_intersection.ty = idx_attributes_ty.y;
+        let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index][0]];
+        let texture_pos = tex_pos[material_idx[intersection.instance_index].materials[intersection.primitive_index][1]];
+        let idx_diffuse_emission = unpack_2xu16(material.tex_idx_base_colour_emission);
+        let idx_roughness_coat = unpack_2xu16(material.tex_idx_roughness_coat);
+        let idx_subsurface_metalness = unpack_2xu16(material.tex_idx_subsurface_metalness);
+        let idx_specular = unpack_2xu16(material.tex_idx_specular_colour_specular_rougness);
+        let ty_thin_walled_subsurface = unpack4xU8(material.ty_thin_walled_subsurface);
+        return_intersection.ty = ty_thin_walled_subsurface.x;
+        return_intersection.thin_walled = bool(ty_thin_walled_subsurface.y & (1 << 7));
+
+        if return_intersection.thin_walled {
+            return_intersection.front_face = true;
+        }
+
+        const SUBSURFACE_MASK = (1 << 7) - 1;
+        return_intersection.subsurface_weight = f32(ty_thin_walled_subsurface.y & (SUBSURFACE_MASK)) / f32(SUBSURFACE_MASK);
+        return_intersection.subsurface_anisotropy = unpack2x16snorm(material.ty_thin_walled_subsurface).y;
         let ref_idx = unpack2x16float(material.refractive_index);
         return_intersection.refractive_index_low = ref_idx.x;
         return_intersection.refractive_index_high = ref_idx.y;
+        let ref_idx_spec = unpack2x16float(material.specular_refractive_index);
+        return_intersection.specular_refractive_index_low = ref_idx_spec.x;
+        return_intersection.specular_refractive_index_high = ref_idx_spec.y;
 
         var normal: vec3<f32>;
         var tangent: vec3<f32>;
@@ -988,21 +1105,58 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         return_intersection.tangent = tangent;
 
         let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
-        let tex_coords_float = fma(unpack2x16float(material.tex_pos_1), vec2<f32>(bary.z), fma(unpack2x16float(material.tex_pos_2), vec2<f32>(bary.x), (unpack2x16float(material.tex_pos_3) * bary.y)));
-
+        let colour_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_base_colour_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_base_colour_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_base_colour_3) * bary.y)));
+        let emission_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_emission_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_emission_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_emission_3) * bary.y)));
+        let attributes_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_attributes_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_attributes_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_attributes_3) * bary.y)));
+        let coat_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_coat_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_coat_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_coat_3) * bary.y)));
+        let sub_surface_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_sub_surface_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_sub_surface_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_sub_surface_3) * bary.y)));
+        let metalness_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_metalness_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_metalness_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_metalness_3) * bary.y)));
+        let specular_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_specular_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_specular_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_specular_3) * bary.y)));
+        
         //return_intersection.color = vec3f(tex_coords_float, 0.0);
-        let diffuse_colour = textureSampleLevel(tex_diffuse[idx_diffuse_emission.x], sam, tex_coords_float, intersection.t).xyz * textureLoad(tex_recolour, unpack_2xu16(material.tex_pos_recolour), 0).xyz;
-        return_intersection.color = diffuse_colour;
+        let recolour = textureLoad(tex_recolour, unpack_2xu16(material.tex_pos_recolour), 0).xyz;
+        let diffuse_colour = textureSampleLevel(textures[idx_diffuse_emission.x], sam, colour_tex_coords_float, intersection.t).xyz * recolour;
+        return_intersection.color_base = diffuse_colour;
+        if (idx_roughness_coat.y != 0xFFFFu) {
+            let coat_colour = textureSampleLevel(textures[idx_roughness_coat.y], sam, coat_tex_coords_float, intersection.t);
+            return_intersection.color_coat = vec4(coat_colour.xyz * recolour, coat_colour.w);
+        } else {
+            return_intersection.color_coat = vec4(1.0, 1.0, 1.0, 0.0);
+        }
+        
+        if (idx_subsurface_metalness.x != 0xFFFFu) {
+            let subsurface_colour = textureSampleLevel(textures[idx_subsurface_metalness.x], sam, sub_surface_tex_coords_float, intersection.t).xyz * recolour;
+            return_intersection.color_subsurface = subsurface_colour;
+        } else {
+            return_intersection.color_subsurface = vec3(0.8, 0.8, 0.8);
+        }
+        if (idx_subsurface_metalness.y != 0xFFFFu) {
+            let metalness = textureSampleLevel(textures[idx_subsurface_metalness.y], sam, metalness_tex_coords_float, intersection.t).x;
+            return_intersection.metalness = metalness;
+        } else {
+            return_intersection.metalness = 0.0;
+        }
         let emission_scale = bitcast<vec2<f32>>(unpack_2xu16(material.emission_scale) << vec2(16));
         if (idx_diffuse_emission.y != 0xFFFFu) {
-            return_intersection.emission = textureSampleLevel(tex_emission[idx_diffuse_emission.y], sam, tex_coords_float, intersection.t).xyz * emission_scale.x;
-            //return_intersection.tri_area = spherical_size(vertices[0] - (*ray).origin, vertices[1] - (*ray).origin, vertices[2] - (*ray).origin);
+            return_intersection.emission = textureSampleLevel(textures[idx_diffuse_emission.y], sam, emission_tex_coords_float, intersection.t).xyz * emission_scale.x;
         }
         return_intersection.emission += diffuse_colour * emission_scale.y;
-        if (idx_attributes_ty.x != 0xFFFFu) {
-            let attributes = textureSampleLevel(tex_attributes[idx_attributes_ty.x], sam, tex_coords_float, intersection.t);
+        if (idx_roughness_coat.x != 0xFFFFu) {
+            let attributes = textureSampleLevel(textures[idx_roughness_coat.x], sam, attributes_tex_coords_float, intersection.t);
             return_intersection.roughness = attributes.xy;
-            return_intersection.roughness_transparent = attributes.zw;
+            return_intersection.roughness_coat = attributes.zw;
+        }
+        if (idx_specular.x != 0xFFFFu) {
+            let specular_colour = textureSampleLevel(textures[idx_specular.x], sam, specular_tex_coords_float, intersection.t);
+            return_intersection.color_specular = specular_colour;
+        } else {
+            return_intersection.color_specular = vec4(1.0);
+        }
+        if (idx_specular.y != 0xFFFFu) {
+            let specular_rougness = textureSampleLevel(textures[idx_specular.y], sam, specular_tex_coords_float, intersection.t).xy;
+            return_intersection.roughness_specular = specular_rougness;
+        } else {
+            return_intersection.roughness_specular = vec2(0.0);
         }
     }
     return return_intersection;

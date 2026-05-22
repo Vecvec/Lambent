@@ -8,7 +8,8 @@ description = "A ray / path tracer built on wgpu."
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-wgpu = "29"
+#wgpu = "29"
+wgpu = { git = "https://github.com/Vecvec/wgpu.git", branch = "unlocked-fences" }
 futures = "0.3.30"
 bytemuck = { version =  "1.22.0", features = ["derive"] }
 cgmath = "0.18"

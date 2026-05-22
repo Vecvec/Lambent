@@ -19,20 +19,20 @@ fn conv_rough(rough:f32) -> f32 {
 const LOW_LAMBDA: f32 = 760.0;
 const HIGH_LAMBDA: f32 = 340.0;
 
-fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> vec4<f32> {
-    if (!(*picked).picked) {
-        let picked_idx = rand_f32(seed);
-        *picked = PickedRefIdx(picked_idx, true);
-        let lambda = mix(LOW_LAMBDA, HIGH_LAMBDA, picked_idx);
-        let x = fma(1.056, g(lambda, 599.8, 0.0264, 0.0323), fma(0.362, g(lambda, 442.0, 0.0624, 0.0374), -(0.065 * g(lambda, 501.1, 0.049, 0.0382))));
-        let y = fma(0.821, g(lambda, 568.8, 0.0213, 0.0248), (0.286 * g(lambda, 530.9, 0.0613, 0.0322)));
-        let z = fma(1.217, g(lambda, 437.0, 0.0845, 0.0278), (0.681 * g(lambda, 459.0, 0.0385, 0.0725)));
-        let rgb = to_linear(vec3<f32>(x, y, z));
-        // These seem random, but are the reprocals of the intergrals of this function so it matches all other shaders
-        return vec4<f32>(saturate(rgb) * vec3<f32>(3.910, 4.411, 5.511), mix(low_idx, high_idx, (*picked).picked_idx));
-    } else {
-        return vec4<f32>(vec3<f32>(1.0), mix(low_idx, high_idx, (*picked).picked_idx));
-    }
+fn pick_ref_idx_blend(picked: ptr<function, PickedRefIdx>, seed:u32) -> vec3<f32> {
+    let picked_idx = rand_f32(seed);
+    *picked = PickedRefIdx(picked_idx);
+    let lambda = mix(LOW_LAMBDA, HIGH_LAMBDA, picked_idx);
+    let x = fma(1.056, g(lambda, 599.8, 0.0264, 0.0323), fma(0.362, g(lambda, 442.0, 0.0624, 0.0374), -(0.065 * g(lambda, 501.1, 0.049, 0.0382))));
+    let y = fma(0.821, g(lambda, 568.8, 0.0213, 0.0248), (0.286 * g(lambda, 530.9, 0.0613, 0.0322)));
+    let z = fma(1.217, g(lambda, 437.0, 0.0845, 0.0278), (0.681 * g(lambda, 459.0, 0.0385, 0.0725)));
+    let rgb = to_linear(vec3<f32>(x, y, z));
+    // These seem random, but are the reprocals of the intergrals of this function so it matches all other shaders
+    return saturate(rgb) * vec3<f32>(3.910, 4.411, 5.511);
+}
+
+fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> f32 {
+    return mix(low_idx, high_idx, picked.picked_idx);
 }
 
 fn g(x:f32, u:f32, tau_1:f32, tau_2:f32) -> f32 {

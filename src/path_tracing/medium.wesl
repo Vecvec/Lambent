@@ -16,10 +16,12 @@ fn conv_rough(rough:f32) -> f32 {
     return rough;
 }
 
-fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> vec4<f32> {
-    if (!(*picked).picked) {
-        let picked_idx = rand_f32(seed);
-        *picked = PickedRefIdx(picked_idx, true);
-    }
-    return vec4<f32>(vec3<f32>(1.0), mix(low_idx, high_idx, (*picked).picked_idx));
+fn pick_ref_idx_blend(picked: ptr<function, PickedRefIdx>, seed:u32) -> vec3<f32> {
+    let picked_idx = rand_f32(seed);
+    *picked = PickedRefIdx(picked_idx);
+    return vec3(1.0);
+}
+
+fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> f32 {
+    return mix(low_idx, high_idx, (*picked).picked_idx);
 }

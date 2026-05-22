@@ -13,6 +13,11 @@ fn conv_rough(rough:f32) -> f32 {
     return 0.0;
 }
 
-fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> vec4<f32> {
-    return vec4<f32>(vec3<f32>(1.0), low_idx);
+fn pick_ref_idx_blend(picked: ptr<function, PickedRefIdx>, seed:u32) -> vec3<f32> {
+    // no-op
+    return vec3(1.0);
+}
+
+fn pick_ref_idx(picked: ptr<function, PickedRefIdx>, low_idx:f32, high_idx:f32, seed:u32) -> f32 {
+    return low_idx;
 }

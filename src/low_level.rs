@@ -4,6 +4,8 @@
 //! other crates to implement them. If you use these, there will be
 //! much more frequent and more subtle (and complex) breaking changes.
 
+#[cfg(no_vertex_return)]
+use crate::{Material, TexturePositions};
 use crate::{low_level, DynamicRayTracer, RayTracer};
 use std::{any::Any, num::NonZeroU32, rc::Rc};
 use wesl::Resolver;
@@ -180,6 +182,7 @@ pub unsafe trait RayTracingShader: Sized + 'static {
             max_storage_buffer_binding_size: Limits::default().max_storage_buffer_binding_size,
             // see docs for why 500,000.
             max_binding_array_elements_per_shader_stage: 500_000,
+            max_storage_buffers_per_shader_stage: 9,
             ..Limits::default()
         }
     }
@@ -237,9 +240,7 @@ unsafe impl<T: RayTracingShader> RayTracingShaderDST for T {
 pub fn pipeline_layout(
     device: &Device,
     blas_count: NonZeroU32,
-    diffuse_count: NonZeroU32,
-    emission_count: NonZeroU32,
-    attribute_count: NonZeroU32,
+    texture_count: NonZeroU32,
     extra_bgls: &[BindGroupLayout],
 ) -> PipelineLayout {
     #[cfg(not(no_vertex_return))]
@@ -281,7 +282,7 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(32).unwrap()),
+                min_binding_size: Some(BufferSize::new(size_of::<Material>() as _).unwrap()),
             },
             count: None,
         },
@@ -291,12 +292,22 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(4).unwrap()),
+                min_binding_size: Some(BufferSize::new(size_of::<TexturePositions>() as _).unwrap()),
+            },
+            count: None,
+        },
+        BindGroupLayoutEntry {
+            binding: 2,
+            visibility: ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: Some(BufferSize::new(8).unwrap()),
             },
             count: Some(blas_count),
         },
         BindGroupLayoutEntry {
-            binding: 2,
+            binding: 3,
             visibility: ShaderStages::COMPUTE,
             ty: BindingType::AccelerationStructure {
                 vertex_return: false,
@@ -304,7 +315,7 @@ pub fn pipeline_layout(
             count: None,
         },
         BindGroupLayoutEntry {
-            binding: 3,
+            binding: 4,
             visibility: ShaderStages::COMPUTE,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
@@ -314,7 +325,7 @@ pub fn pipeline_layout(
             count: Some(blas_count),
         },
         BindGroupLayoutEntry {
-            binding: 4,
+            binding: 5,
             visibility: ShaderStages::COMPUTE,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
@@ -332,7 +343,7 @@ pub fn pipeline_layout(
     bgls.push(&mat_bgl);
     let out_bgl = out_bgl(device);
     bgls.push(&out_bgl);
-    let texture_bgl = texture_bgl(device, [diffuse_count, emission_count, attribute_count]);
+    let texture_bgl = texture_bgl(device, texture_count);
     bgls.push(&texture_bgl);
     bgls.extend(extra_bgls.iter());
     device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -342,7 +353,7 @@ pub fn pipeline_layout(
     })
 }
 
-pub(crate) fn texture_bgl(device: &Device, counts: [NonZeroU32; 3]) -> BindGroupLayout {
+pub(crate) fn texture_bgl(device: &Device, count: NonZeroU32) -> BindGroupLayout {
     device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: None,
         entries: &[
@@ -360,30 +371,10 @@ pub(crate) fn texture_bgl(device: &Device, counts: [NonZeroU32; 3]) -> BindGroup
                     view_dimension: TextureViewDimension::D2,
                     multisampled: false,
                 },
-                count: Some(counts[0]),
+                count: Some(count),
             },
             BindGroupLayoutEntry {
                 binding: 2,
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: true },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: Some(counts[1]),
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: true },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: Some(counts[2]),
-            },
-            BindGroupLayoutEntry {
-                binding: 4,
                 visibility: ShaderStages::COMPUTE,
                 ty: BindingType::Texture {
                     sample_type: TextureSampleType::Float { filterable: true },

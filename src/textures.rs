@@ -151,27 +151,19 @@ fn create_blank_recolour(device: &Device, queue: &Queue) -> TextureView {
 pub fn bind_group_from_textures(
     device: &Device,
     queue: &Queue,
-    diffuse_tex: &WgpuTextures,
-    emission_tex: &WgpuTextures,
-    attribute_tex: &WgpuTextures,
+    textures: &WgpuTextures,
     recolour_tex: Option<TextureView>,
     sampler: Option<&Sampler>,
 ) -> (BindGroup, BindGroupLayout) {
     let bgl = texture_bgl(
         device,
-        [
-            NonZeroU32::new(diffuse_tex.textures.len() as u32).unwrap(),
-            NonZeroU32::new(emission_tex.textures.len() as u32).unwrap(),
-            NonZeroU32::new(attribute_tex.textures.len() as u32).unwrap(),
-        ],
+        NonZeroU32::new(textures.textures.len() as u32).unwrap(),
     );
 
     let bg = bind_group_from_textures_bindgroup_layout(
         device,
         queue,
-        diffuse_tex,
-        emission_tex,
-        attribute_tex,
+        textures,
         recolour_tex,
         sampler,
         &bgl,
@@ -183,9 +175,7 @@ pub fn bind_group_from_textures(
 pub fn bind_group_from_textures_bindgroup_layout(
     device: &Device,
     queue: &Queue,
-    diffuse_tex: &WgpuTextures,
-    emission_tex: &WgpuTextures,
-    attribute_tex: &WgpuTextures,
+    textures: &WgpuTextures,
     recolour_tex: Option<TextureView>,
     sampler: Option<&Sampler>,
     layout: &BindGroupLayout,
@@ -201,17 +191,9 @@ pub fn bind_group_from_textures_bindgroup_layout(
     };
 
     let recolour_tex = recolour_tex.unwrap_or_else(|| create_blank_recolour(device, queue));
-    let mut diffuse_views = Vec::with_capacity(diffuse_tex.views.len());
-    for view in diffuse_tex.views.iter() {
-        diffuse_views.push(view);
-    }
-    let mut emission_views = Vec::with_capacity(diffuse_tex.views.len());
-    for view in emission_tex.views.iter() {
-        emission_views.push(view);
-    }
-    let mut attribute_views = Vec::with_capacity(diffuse_tex.views.len());
-    for view in attribute_tex.views.iter() {
-        attribute_views.push(view);
+    let mut tex_views = Vec::with_capacity(textures.views.len());
+    for view in textures.views.iter() {
+        tex_views.push(view);
     }
     let bg = device.create_bind_group(&BindGroupDescriptor {
         label: None,
@@ -223,18 +205,10 @@ pub fn bind_group_from_textures_bindgroup_layout(
             },
             BindGroupEntry {
                 binding: 1,
-                resource: BindingResource::TextureViewArray(&diffuse_views),
+                resource: BindingResource::TextureViewArray(&tex_views),
             },
             BindGroupEntry {
                 binding: 2,
-                resource: BindingResource::TextureViewArray(&emission_views),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: BindingResource::TextureViewArray(&attribute_views),
-            },
-            BindGroupEntry {
-                binding: 4,
                 resource: BindingResource::TextureView(&recolour_tex),
             },
         ],

@@ -5,7 +5,7 @@ use crate::low_level::RayTracingShaderDST;
 use crate::textures::TextureLoader;
 use crate::{
     debug, dispatch_size, path_tracing, textures, AdvanceOptions, Descriptor, Material,
-    MaterialType, Vertices,
+    MaterialType, TexturePositions, Vertices,
 };
 use crate::{BufferType, DataBuffers};
 use cgmath::{ElementWise, Matrix4, Point3, Vector3};
@@ -15,6 +15,7 @@ use image::EncodableLayout;
 use log::LevelFilter;
 use std::cmp::max;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, mem, panic};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -52,103 +53,225 @@ fn test() {
     let positions = [[1.0, 1.0], [0.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
     let materials = [
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0, 0],
             0,
-            Some(0),
-            Some(0),
+            Some(2),
+            Some(4),
+            None,
+            None,
+            None,
+            None,
+            None,
             crate::EmissionScale::from_emission_scale(1.0),
             Some(crate::refractive_indices::DIAMOND),
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[3],
-            positions[2],
-            positions[1],
             [0, 0],
             0,
-            Some(0),
-            Some(0),
+            Some(2),
+            Some(4),
+            None,
+            None,
+            None,
+            None,
+            None,
             crate::EmissionScale::from_emission_scale(1.0),
             Some(crate::refractive_indices::DIAMOND),
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[0],
-            positions[2],
-            positions[1],
             [0, 0],
             1,
-            Some(1),
+            Some(3),
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             crate::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[1],
-            positions[3],
-            positions[2],
             [0, 0],
             1,
-            Some(1),
+            Some(3),
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             crate::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[2],
-            positions[3],
-            positions[0],
             [0, 0],
             0,
-            Some(0),
-            Some(0),
+            Some(2),
+            Some(4),
+            None,
+            None,
+            Some(5),
+            None,
+            Some(4),
             crate::EmissionScale::from_emission_scale(1.0),
             None,
-            MaterialType::Metallic,
+            None,
+            MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[1],
-            positions[0],
-            positions[3],
             [0, 0],
             0,
-            Some(0),
-            Some(0),
+            Some(2),
+            Some(4),
+            None,
+            None,
+            Some(5),
+            None,
+            Some(4),
             crate::EmissionScale::from_emission_scale(1.0),
+            None,
             None,
             MaterialType::Metallic,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0, 0],
-            1,
+            0,
             None,
+            None,
+            None,
+            None,
+            None,
+            Some(0),
             None,
             crate::EmissionScale::from_emission_scale(1.0),
+            None,
             Some(crate::refractive_indices::WATER),
             MaterialType::Transparent,
+            false,
+            0.0,
+            0.0
         ),
         Material::new(
-            positions[1],
-            positions[3],
-            positions[2],
             [0, 0],
-            1,
+            0,
             None,
+            None,
+            None,
+            None,
+            None,
+            Some(0),
             None,
             crate::EmissionScale::from_emission_scale(1.0),
+            None,
             Some(crate::refractive_indices::WATER),
             MaterialType::Transparent,
+            false,
+            0.0,
+            0.0
         ),
     ];
-    let material_indices = [0, 1, 2, 3, 4, 5, 6, 7];
+    let texture_positions = [
+        TexturePositions::new(
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+        ),
+        TexturePositions::new(
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+            [positions[3], positions[2], positions[1]],
+        ),
+        TexturePositions::new(
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+            [positions[0], positions[2], positions[1]],
+        ),
+        TexturePositions::new(
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+        ),
+        TexturePositions::new(
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+            [positions[2], positions[3], positions[0]],
+        ),
+        TexturePositions::new(
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+            [positions[1], positions[0], positions[3]],
+        ),
+        TexturePositions::new(
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+            [positions[0], positions[1], positions[2]],
+        ),
+        TexturePositions::new(
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+            [positions[1], positions[3], positions[2]],
+        ),
+    ];
+    let material_indices = [[0; 2], [1; 2], [2; 2], [3; 2], [4; 2], [5; 2], [6; 2], [7; 2]];
     let vertices = Vertices {
         geometry_stride: 0,
         vertices: vec![
@@ -177,6 +300,7 @@ fn test() {
             &vertices,
             &indices,
             &materials,
+            &texture_positions,
             &material_indices,
             &mut glfw,
             &mut window,
@@ -188,6 +312,7 @@ fn test() {
             &vertices,
             &indices,
             &materials,
+            &texture_positions,
             &material_indices,
             &mut glfw,
             &mut window,
@@ -202,7 +327,8 @@ fn exe_shader(
     vertices: &Vertices,
     indices: &[u32],
     materials: &[Material],
-    material_indices: &[u32],
+    texture_position: &[TexturePositions],
+    material_indices: &[[u32;2]],
     glfw: &mut Glfw,
     window: &mut PWindow,
     run_is: bool,
@@ -221,6 +347,7 @@ fn exe_shader(
                 vertices,
                 indices,
                 materials,
+                texture_position,
                 material_indices,
                 glfw,
                 window,
@@ -283,7 +410,8 @@ fn run_shader(
     vertices: &Vertices,
     indices: &[u32],
     materials: &[Material],
-    material_indices: &[u32],
+    texture_position: &[TexturePositions],
+    material_indices: &[[u32; 2]],
     glfw: &mut Glfw,
     window: &mut PWindow,
     run_is: bool,
@@ -301,6 +429,11 @@ fn run_shader(
         }),
     )
     .map_err(ExcErr::Device)?;
+
+    device.on_uncaptured_error(Arc::new(|e| {
+        log::error!("{e}");
+        panic!("got error");
+    }));
     log::info!(
         "Found device:\n   {}, {:?}",
         adapter.get_info().name,
@@ -316,29 +449,27 @@ fn run_shader(
     surface_config.present_mode = PresentMode::AutoNoVsync;
     surface.configure(&device, &surface_config);
 
-    let mut loader_diffuse = TextureLoader::new();
-    loader_diffuse
+    let mut loader = TextureLoader::new();
+    loader
         .load_from_bytes(include_bytes!("diffuse.png"))
         .expect("these are valid PNGs so this should not fail");
-    loader_diffuse
+    loader
         .load_from_bytes(include_bytes!("pure_white.png"))
         .expect("these are valid PNGs so this should not fail");
-    let diffuse_textures = loader_diffuse.create_textures(&device, &queue, TextureUsages::empty());
-    let mut loader_emission = TextureLoader::new();
-    loader_emission
+    loader
         .load_from_bytes(include_bytes!("emission_partial.png"))
         .expect("these are valid PNGs so this should not fail");
-    loader_emission
+    loader
         .load_from_bytes(include_bytes!("emission.png"))
         .expect("these are valid PNGs so this should not fail");
-    let emission_textures =
-        loader_emission.create_textures(&device, &queue, TextureUsages::empty());
-    let mut loader_attribute = TextureLoader::new();
-    loader_attribute
+    loader
         .load_from_bytes(include_bytes!("attributes.png"))
         .expect("these are valid PNGs so this should not fail");
-    let attribute_textures =
-        loader_attribute.create_textures(&device, &queue, TextureUsages::empty());
+    loader
+        .load_from_bytes(include_bytes!("metalness.png"))
+        .expect("these are valid PNGs so this should not fail");
+    let textures =
+        loader.create_textures(&device, &queue, TextureUsages::empty());
 
     let texture_back = device.create_texture(&TextureDescriptor {
         label: Some("background"),
@@ -368,9 +499,7 @@ fn run_shader(
     let (texture_bg, _) = textures::bind_group_from_textures(
         &device,
         &queue,
-        &diffuse_textures,
-        &emission_textures,
-        &attribute_textures,
+        &textures,
         None,
         None,
     );
@@ -380,17 +509,13 @@ fn run_shader(
     let layout = crate::low_level::pipeline_layout(
         &device,
         NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(2).unwrap(),
-        NonZeroU32::new(2).unwrap(),
-        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(6).unwrap(),
         &[],
     );
 
     let compute_pipeline = shader.create_pipeline(
         NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(2).unwrap(),
-        NonZeroU32::new(2).unwrap(),
-        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(6).unwrap(),
         &crate::RayTracingOptions::default(),
     );
 
@@ -508,6 +633,8 @@ fn run_shader(
 
     let material_buf =
         device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::empty()));
+    let texture_pos_buf =
+        device.create_buffer_init(&texture_position.buffer_descriptor(BufferUsages::empty()));
     let material_indices_buf = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(material_indices),
@@ -524,20 +651,24 @@ fn run_shader(
             },
             BindGroupEntry {
                 binding: 1,
+                resource: BindingResource::Buffer(texture_pos_buf.as_entire_buffer_binding()),
+            },
+            BindGroupEntry {
+                binding: 2,
                 resource: BindingResource::BufferArray(&[
                     material_indices_buf.as_entire_buffer_binding()
                 ]),
             },
             BindGroupEntry {
-                binding: 2,
+                binding: 3,
                 resource: BindingResource::AccelerationStructure(&tlas),
             },
             BindGroupEntry {
-                binding: 3,
+                binding: 4,
                 resource: BindingResource::BufferArray(&[vertex_buffer.as_entire_buffer_binding()]),
             },
             BindGroupEntry {
-                binding: 4,
+                binding: 5,
                 resource: BindingResource::BufferArray(&[index_buffer.as_entire_buffer_binding()]),
             },
         ],
@@ -640,7 +771,7 @@ fn run_shader(
         );
 
         queue.submit(Some(encoder.finish()));
-        surface_texture.present();
+        queue.present(surface_texture);
         let new_time = start.elapsed().as_secs();
         if new_time > elapsed {
             elapsed = new_time;
