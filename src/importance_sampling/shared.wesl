@@ -212,15 +212,20 @@ fn pdf(normal:vec3<f32>, in:vec3<f32>, out:vec3<f32>, ty:u32, albedo: vec3<f32>,
     return 1.0;
 }
 
-fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, reflected: vec3<f32>, roughness:f32, color:vec3<f32>) -> vec3<f32> {
-    let rad_roughness = roughness * HALF_PI;
+/// incoming is the direction of the ray.
+fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, normal: vec3<f32>, reflected: vec3<f32>, roughness:f32, color:vec3<f32>) -> vec3<f32> {
+    let n_dot_l = dot(normal, -reflected);
+    let n_dot_v = dot(normal, -incoming);
+    let v_dot_l = dot(-incoming, -reflected);
+
+    let rad_roughness = roughness;
     let rad_roughness_squared = rad_roughness * rad_roughness;
     let a = fma(0.17 * color, vec3<f32>(rad_roughness_squared / (rad_roughness_squared + 0.13)), vec3<f32>(1.0 - (0.5 * (rad_roughness_squared / (rad_roughness_squared + 0.33)))));
     let b = 0.45 * (rad_roughness_squared / (rad_roughness_squared + 0.09));
-    let s = fma(-reflected.y, incoming.y, dot(reflected, incoming));
+    let s = fma(n_dot_l, n_dot_v, v_dot_l);
     var t = 1.0;
     if s > 0.0 {
-        t = max(reflected.y, incoming.y);
+        t = max(n_dot_l, n_dot_v);
         // this removes lots of weird dark spots from the image
         if (near_zero(t)) {
             t = 0.001;
