@@ -68,7 +68,7 @@ fn test() {
             MaterialType::Diffuse,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -86,7 +86,7 @@ fn test() {
             MaterialType::Diffuse,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -104,7 +104,7 @@ fn test() {
             MaterialType::Diffuse,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -122,7 +122,7 @@ fn test() {
             MaterialType::Diffuse,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -140,7 +140,7 @@ fn test() {
             MaterialType::Diffuse,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -158,7 +158,7 @@ fn test() {
             MaterialType::Metallic,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -176,7 +176,7 @@ fn test() {
             MaterialType::Transparent,
             false,
             0.0,
-            0.0
+            0.0,
         ),
         Material::new(
             [0, 0],
@@ -194,7 +194,7 @@ fn test() {
             MaterialType::Transparent,
             false,
             0.0,
-            0.0
+            0.0,
         ),
     ];
     let texture_positions = [
@@ -271,7 +271,9 @@ fn test() {
             [positions[1], positions[3], positions[2]],
         ),
     ];
-    let material_indices = [[0; 2], [1; 2], [2; 2], [3; 2], [4; 2], [5; 2], [6; 2], [7; 2]];
+    let material_indices = [
+        [0; 2], [1; 2], [2; 2], [3; 2], [4; 2], [5; 2], [6; 2], [7; 2],
+    ];
     let vertices = Vertices {
         geometry_stride: 0,
         vertices: vec![
@@ -328,7 +330,7 @@ fn exe_shader(
     indices: &[u32],
     materials: &[Material],
     texture_position: &[TexturePositions],
-    material_indices: &[[u32;2]],
+    material_indices: &[[u32; 2]],
     glfw: &mut Glfw,
     window: &mut PWindow,
     run_is: bool,
@@ -468,8 +470,7 @@ fn run_shader(
     loader
         .load_from_bytes(include_bytes!("metalness.png"))
         .expect("these are valid PNGs so this should not fail");
-    let textures =
-        loader.create_textures(&device, &queue, TextureUsages::empty());
+    let textures = loader.create_textures(&device, &queue, TextureUsages::empty());
 
     let texture_back = device.create_texture(&TextureDescriptor {
         label: Some("background"),
@@ -496,13 +497,8 @@ fn run_shader(
         BufferType::all(),
     );
 
-    let (texture_bg, _) = textures::bind_group_from_textures(
-        &device,
-        &queue,
-        &textures,
-        None,
-        None,
-    );
+    let (texture_bg, _) =
+        textures::bind_group_from_textures(&device, &queue, &textures, None, None);
     let _samples: u32 = if run_is { 1 } else { 4 };
 
     #[cfg(feature = "wip-features")]

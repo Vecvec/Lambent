@@ -6,6 +6,7 @@ use lambent::importance_sampling::{SpatialResampling, TemporalResampling};
 use lambent::textures::TextureLoader;
 use lambent::{
     dispatch_size, path_tracing, textures, DataBuffers, Descriptor, Material, MaterialType,
+    TexturePositions,
 };
 use lambent::{refractive_indices, AdvanceOptions, BufferType};
 use std::cmp::{max, min};
@@ -95,82 +96,127 @@ fn main() {
 
     // For a real scene, these should be generated
     let positions = [[1.0, 1.0], [0.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+    let texture_positions = &[TexturePositions::new(
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+        [positions[0], positions[1], positions[2]],
+    )];
     let materials = &[
         // since these textures are a solid color it is only required for one of each material
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             0,
             None,
-            Some(0),
+            Some(5),
+            None,
+            None,
+            None,
+            None,
+            None,
             lambent::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0,
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             1,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
             lambent::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0,
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             2,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
             lambent::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0,
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             3,
-            Some(0),
+            Some(4),
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             lambent::EmissionScale::from_emission_scale(POINT_BRIGHTNESS),
             None,
+            None,
             MaterialType::Diffuse,
+            false,
+            0.0,
+            0.0,
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             0,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
             lambent::EmissionScale::from_emission_scale(1.0),
+            None,
             Some(refractive_indices::refractive_index_between(
                 refractive_indices::AIR,
                 refractive_indices::DIAMOND,
             )),
             MaterialType::Transparent,
+            false,
+            0.0,
+            0.0,
         ),
         Material::new(
-            positions[0],
-            positions[1],
-            positions[2],
             [0; 2],
             0,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
             lambent::EmissionScale::from_emission_scale(1.0),
             None,
+            None,
             MaterialType::Metallic,
+            false,
+            0.0,
+            0.0,
         ),
     ];
 
@@ -237,7 +283,8 @@ fn main() {
     let mat_indices = [
         0u32, 0, 2, 2, 0, 0, 0, 0, 1, 1, 3, 3, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4,
         4, 4, 4,
-    ];
+    ]
+    .map(|v| [v, 0]); // all use the same texture positions
 
     let instance = wgpu::Instance::new(InstanceDescriptor::new_without_display_handle());
     let adapter = block_on(instance.request_adapter(&RequestAdapterOptions::default()))
@@ -296,49 +343,30 @@ fn main() {
     surface_config.present_mode = PresentMode::AutoNoVsync;
     surface.configure(&device, &surface_config);
 
-    let mut loader_diffuse = TextureLoader::new();
-    loader_diffuse
+    let mut loader = TextureLoader::new();
+    loader
         .load_from_bytes(include_bytes!("light_gray.png"))
         .unwrap();
-    loader_diffuse
-        .load_from_bytes(include_bytes!("green.png"))
-        .unwrap();
-    loader_diffuse
-        .load_from_bytes(include_bytes!("red.png"))
-        .unwrap();
-    loader_diffuse
+    loader.load_from_bytes(include_bytes!("green.png")).unwrap();
+    loader.load_from_bytes(include_bytes!("red.png")).unwrap();
+    loader
         .load_from_bytes(include_bytes!("pure_white.png"))
         .unwrap();
-    let mut loader_emission = TextureLoader::new();
-    loader_emission
+    loader
         .load_from_bytes(include_bytes!("pure_white.png"))
         .unwrap();
-    let mut loader_attributes = TextureLoader::new();
-    loader_attributes
+    loader
         .load_from_bytes(include_bytes!("pure_red.png"))
         .unwrap();
-    let diffuse_textures = loader_diffuse.create_textures(&device, &queue, TextureUsages::empty());
-    let emission_textures =
-        loader_emission.create_textures(&device, &queue, TextureUsages::empty());
-    let attribute_textures =
-        loader_attributes.create_textures(&device, &queue, TextureUsages::empty());
+    let textures = loader.create_textures(&device, &queue, TextureUsages::empty());
 
     let buffers = DataBuffers::new(&device, SIZE, SIZE, 1_500_000, BufferType::all());
-    let (texture_bg, _) = textures::bind_group_from_textures(
-        &device,
-        &queue,
-        &diffuse_textures,
-        &emission_textures,
-        &attribute_textures,
-        None,
-        None,
-    );
+    let (texture_bg, _) =
+        textures::bind_group_from_textures(&device, &queue, &textures, None, None);
 
     let compute_pipeline = ray_tracer.create_pipeline(
         NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(4).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(6).unwrap(),
         &lambent::RayTracingOptions {
             samples,
             ..Default::default()
@@ -346,19 +374,13 @@ fn main() {
     );
 
     let temporal_resampling = TemporalResampling::new(&device);
-    let temporal_compute_pipeline: wgpu::ComputePipeline = temporal_resampling.create_pipeline(
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(4).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-    );
+    let temporal_compute_pipeline: wgpu::ComputePipeline = temporal_resampling
+        .create_pipeline(NonZeroU32::new(1).unwrap(), NonZeroU32::new(6).unwrap());
 
     let spacial_resampling = SpatialResampling::new(&device);
     let spacial_compute_pipeline: wgpu::ComputePipeline = spacial_resampling.create_pipeline(
         NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(4).unwrap(),
-        NonZeroU32::new(1).unwrap(),
-        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(6).unwrap(),
         &[
             //("SAMPLES", SAMPLES as f64),
             ("IS_SAMPLES", IS_SAMPLES as f64),
@@ -568,6 +590,8 @@ fn main() {
 
     let material_buf =
         device.create_buffer_init(&materials.buffer_descriptor(BufferUsages::COPY_DST));
+    let tex_pos_buf =
+        device.create_buffer_init(&texture_positions.buffer_descriptor(BufferUsages::COPY_DST));
     let material_indices_buf = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&mat_indices),
@@ -585,16 +609,20 @@ fn main() {
             },
             BindGroupEntry {
                 binding: 1,
+                resource: BindingResource::Buffer(tex_pos_buf.as_entire_buffer_binding()),
+            },
+            BindGroupEntry {
+                binding: 2,
                 resource: BindingResource::BufferArray(&[
                     material_indices_buf.as_entire_buffer_binding()
                 ]),
             },
             BindGroupEntry {
-                binding: 2,
+                binding: 3,
                 resource: BindingResource::AccelerationStructure(&tlas),
             },
             BindGroupEntry {
-                binding: 3,
+                binding: 4,
                 resource: BindingResource::BufferArray(&[BufferBinding {
                     buffer: &vertex_buffer,
                     offset: 0,
@@ -602,7 +630,7 @@ fn main() {
                 }]),
             },
             BindGroupEntry {
-                binding: 4,
+                binding: 5,
                 resource: BindingResource::BufferArray(&[BufferBinding {
                     buffer: &index_buffer,
                     offset: 0,
@@ -622,12 +650,16 @@ fn main() {
             },
             BindGroupEntry {
                 binding: 1,
+                resource: BindingResource::Buffer(tex_pos_buf.as_entire_buffer_binding()),
+            },
+            BindGroupEntry {
+                binding: 2,
                 resource: BindingResource::BufferArray(&[
                     material_indices_buf.as_entire_buffer_binding()
                 ]),
             },
             BindGroupEntry {
-                binding: 2,
+                binding: 3,
                 resource: BindingResource::AccelerationStructure(&tlas),
             },
         ],
@@ -789,7 +821,7 @@ fn main() {
             }
             queue.submit(Some(encoder.finish()));
         }
-        surface_texture.present();
+        queue.present(surface_texture);
         if change_seed {
             num_frames += 1;
         }
@@ -934,7 +966,7 @@ impl<'a> OidnState<'a> {
         recv.recv_timeout(Duration::from_secs(5)).unwrap();
         let (send, recv) = mpsc::channel();
         let mut data: Vec<f32> =
-            bytemuck::cast_slice(&self.wgpu_map_read.slice(..).get_mapped_range()).to_vec();
+            bytemuck::cast_slice(&self.wgpu_map_read.slice(..).get_mapped_range().unwrap()).to_vec();
         self.wgpu_map_read.unmap();
         self.buf.write(&data);
         self.filter.filter_in_place_buffer(&mut self.buf).unwrap();
@@ -952,6 +984,7 @@ impl<'a> OidnState<'a> {
         self.wgpu_map_write
             .slice(..)
             .get_mapped_range_mut()
+            .unwrap()
             .copy_from_slice(bytemuck::cast_slice(&data));
         self.wgpu_map_write.unmap();
         let mut encoder = wgpu_device.create_command_encoder(&CommandEncoderDescriptor::default());

@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 lambent = { path = "../../", features = ["wip-features"]}
-wgpu = "29"
+#wgpu = "29"
+wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "22bea00" }
 futures = "0.3.30"
 bytemuck = { version =  "1.22.0", features = ["derive"] }
 cgmath = "0.18"

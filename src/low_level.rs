@@ -4,9 +4,9 @@
 //! other crates to implement them. If you use these, there will be
 //! much more frequent and more subtle (and complex) breaking changes.
 
+use crate::{low_level, DynamicRayTracer, RayTracer};
 #[cfg(no_vertex_return)]
 use crate::{Material, TexturePositions};
-use crate::{low_level, DynamicRayTracer, RayTracer};
 use std::{any::Any, num::NonZeroU32, rc::Rc};
 use wesl::Resolver;
 use wgpu::{
@@ -292,7 +292,9 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(size_of::<TexturePositions>() as _).unwrap()),
+                min_binding_size: Some(
+                    BufferSize::new(size_of::<TexturePositions>() as _).unwrap(),
+                ),
             },
             count: None,
         },

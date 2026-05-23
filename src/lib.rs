@@ -443,12 +443,7 @@ fn create_pipeline<Opts: low_level::RayTracerOptions>(
     label: Option<&str>,
     resolver: &Option<RcResolver>,
 ) -> ComputePipeline {
-    let pipeline_layout = low_level::pipeline_layout(
-        device,
-        blas_count,
-        texture_count,
-        extra_bgls,
-    );
+    let pipeline_layout = low_level::pipeline_layout(device, blas_count, texture_count, extra_bgls);
 
     let compiled = compile_shader(src, intersection_handler, resolver);
 

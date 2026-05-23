@@ -56,9 +56,7 @@ impl SpatialResampling {
     pub fn create_pipeline(
         &self,
         blas_count: NonZeroU32,
-        diffuse_count: NonZeroU32,
-        emission_count: NonZeroU32,
-        attribute_count: NonZeroU32,
+        texture_count: NonZeroU32,
         overrides: &[(&str, f64)],
         options: ResamplingOptions,
     ) -> ComputePipeline {
@@ -66,14 +64,8 @@ impl SpatialResampling {
 
         use crate::low_level;
 
-        let pipeline_layout = low_level::pipeline_layout(
-            &self.device,
-            blas_count,
-            diffuse_count,
-            emission_count,
-            attribute_count,
-            &self.extra_bgls,
-        );
+        let pipeline_layout =
+            low_level::pipeline_layout(&self.device, blas_count, texture_count, &self.extra_bgls);
 
         let shader = self
             .device
@@ -138,22 +130,14 @@ impl TemporalResampling {
     pub fn create_pipeline(
         &self,
         blas_count: NonZeroU32,
-        diffuse_count: NonZeroU32,
-        emission_count: NonZeroU32,
-        attribute_count: NonZeroU32,
+        texture_count: NonZeroU32,
     ) -> ComputePipeline {
         use wgpu::ComputePipelineDescriptor;
 
         use crate::low_level;
 
-        let pipeline_layout = low_level::pipeline_layout(
-            &self.device,
-            blas_count,
-            diffuse_count,
-            emission_count,
-            attribute_count,
-            &self.extra_bgls,
-        );
+        let pipeline_layout =
+            low_level::pipeline_layout(&self.device, blas_count, texture_count, &self.extra_bgls);
 
         let shader = self
             .device
