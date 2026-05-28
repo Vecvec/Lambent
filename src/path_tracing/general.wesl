@@ -917,16 +917,24 @@ fn handle_hit(
         //return sample;
     } else if (intersection.ty == TRANSPARENT) {
         (*state).cached_pdf = 1.0;
-        (*state).cached_brdf = 1.0;
-        if bounce_idx == 0u {
-            (*state).first_pdf = (*state).cached_pdf;
-        }
+        
         //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
-        if !intersection.thin_walled { (*ray).direction = refract((*ray).direction, specular_normal.normal, specular_refractive_index); }
+
+        if !intersection.thin_walled {
+            (*state).cached_pdf = specular_normal.pdf;
+            let old_dir = (*ray).direction;
+            (*ray).direction = refract((*ray).direction, specular_normal.normal, specular_refractive_index);
+            (*state).cached_brdf = get_normal_bsdf(old_dir, (*ray).direction, reflect_normal, intersection.normal, intersection.tangent);
+            hit.albedo *= (*state).cached_brdf / (*state).cached_pdf;
+        }
         let dot = dot((*ray).direction, intersection.normal);
 
         if dot > 0.0 {
             hit.albedo = vec3(0.0);
+        }
+
+        if bounce_idx == 0u {
+            (*state).first_pdf = (*state).cached_pdf;
         }
         //sample.color = vec3f(sign(k), -sign(k), sign(dot(intersection.normal, ray.direction)));
         //sample.color = vec3f((refractive_index * refractive_index) / 8.0, (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)), f32((1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)) > 0.25));
