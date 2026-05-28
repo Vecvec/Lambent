@@ -39,10 +39,33 @@ fn vec3_near_zero(v:vec3<f32>) -> bool {
 fn to_onb(src:vec3<f32>, up:vec3<f32>, tangent:vec3<f32>) -> vec3<f32> {
     let s = tangent;
     let t = cross(up, s);
-    let inv_s = cross(up, t);
-    let inv_up = cross(t, s);
-    let inv_t = cross(s, up);
-    return fma(vec3<f32>(src.x), inv_s, fma(vec3<f32>(src.y), inv_up, (src.z * inv_t)));
+
+    // let inv_up = reflect(up, vec3(0.0, 1.0, 0.0));
+    // let inv_s = reflect(s, vec3(1.0, 0.0, 0.0));
+    // let inv_t = reflect(t, vec3(0.0, 0.0, 1.0));
+
+    // return fma(vec3<f32>(src.x), inv_s, fma(vec3<f32>(src.y), inv_up, (src.z * inv_t)));
+    let new_mat = inverse(mat3x3(s, up, t));
+    return fma(vec3<f32>(src.x), new_mat[0], fma(vec3<f32>(src.y), new_mat[1], (src.z * new_mat[2])));
+}
+
+fn inverse(mat: mat3x3<f32>) -> mat3x3<f32> {
+    let det = (mat[0][0] * mat[1][1] * mat[2][2])
+        + (mat[0][1] * mat[1][2] * mat[2][0])
+        + (mat[0][2] * mat[1][0] * mat[2][1])
+        - (mat[0][2] * mat[1][1] * mat[2][0])
+        - (mat[0][0] * mat[1][2] * mat[2][1])
+        - (mat[0][1] * mat[1][0] * mat[2][2]);
+    
+    return mat3x3(
+        det2x2(mat[1][1], mat[1][2], mat[2][1], mat[2][2]), -det2x2(mat[0][1], mat[0][2], mat[2][1], mat[2][2]), det2x2(mat[0][1], mat[0][2], mat[1][1], mat[1][2]),
+        -det2x2(mat[1][0], mat[1][2], mat[2][0], mat[2][2]), det2x2(mat[0][0], mat[0][2], mat[2][0], mat[2][2]), -det2x2(mat[0][0], mat[0][2], mat[1][0], mat[1][2]),
+        det2x2(mat[1][0], mat[1][1], mat[2][0], mat[2][1]), -det2x2(mat[0][0], mat[0][1], mat[2][0], mat[2][1]), det2x2(mat[0][0], mat[0][1], mat[1][0], mat[1][1]),
+    ) * (1.0 / det);
+}
+
+fn det2x2(one_one: f32, one_two: f32, two_one: f32, two_two: f32) -> f32 {
+    return (one_one * two_two) - (one_two * two_one);
 }
 
 struct Sample {

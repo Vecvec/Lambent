@@ -139,8 +139,8 @@ fn test() {
             None,
             MaterialType::Diffuse,
             false,
-            0.0,
-            0.0,
+            1.0,
+            -1.0,
         ),
         Material::new(
             [0, 0],
@@ -499,7 +499,7 @@ fn run_shader(
 
     let (texture_bg, _) =
         textures::bind_group_from_textures(&device, &queue, &textures, None, None);
-    let _samples: u32 = if run_is { 1 } else { 4 };
+    let _samples: u32 = if run_is { 1 } else { 1 };
 
     #[cfg(feature = "wip-features")]
     let layout = crate::low_level::pipeline_layout(
@@ -512,7 +512,10 @@ fn run_shader(
     let compute_pipeline = shader.create_pipeline(
         NonZeroU32::new(1).unwrap(),
         NonZeroU32::new(6).unwrap(),
-        &crate::RayTracingOptions::default(),
+        &crate::RayTracingOptions {
+            samples: NonZeroU32::new(1).unwrap(),
+            ..Default::default()
+        },
     );
 
     #[cfg(feature = "wip-features")]

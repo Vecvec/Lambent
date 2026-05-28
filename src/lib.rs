@@ -228,7 +228,7 @@ impl Material {
 
         let subsurface_weight = (subsurface_weight.clamp(0.0, 1.0) * ((1 << 7) - 1) as f32) as u8;
         let subsurface_anisotropy =
-            ((subsurface_anisotropy.clamp(-1.0, 1.0) * (i16::MAX as f32)) as i16).to_be_bytes();
+            ((subsurface_anisotropy.clamp(-1.0, 1.0) * (i16::MAX as f32)) as i16).to_ne_bytes();
 
         Self {
             tex_pos_recolour,
