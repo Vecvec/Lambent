@@ -45,7 +45,7 @@ import package::bindings::{get_vertices,};
 enable wgpu_ray_query;
 enable wgpu_binding_array;
 @if(vertex_return)
-enable wgpu_ray_vertex_return;
+enable wgpu_ray_query_vertex_return;
 
 // WIP: Importance sampling
 
@@ -1054,7 +1054,7 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         if intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE {
             var vertices: array<vec3<f32>, 3>;
             @if (vertex_return) {
-                vertices = getCommittedVertexPositions(&rq);
+                vertices = getCommittedHitVertexPositions(&rq);
             }
             @if (!vertex_return) {
                 vertices = get_vertices(rayQueryGetCommittedIntersection(&rq));

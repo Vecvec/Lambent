@@ -5,7 +5,6 @@
 //! much more frequent and more subtle (and complex) breaking changes.
 
 use crate::{low_level, DynamicRayTracer, RayTracer};
-#[cfg(no_vertex_return)]
 use crate::{Material, TexturePositions};
 use std::{any::Any, num::NonZeroU32, rc::Rc};
 use wesl::Resolver;
@@ -251,7 +250,7 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(44).unwrap()),
+                min_binding_size: Some(BufferSize::new(size_of::<Material>() as _).unwrap()),
             },
             count: None,
         },
@@ -261,12 +260,24 @@ pub fn pipeline_layout(
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: Some(BufferSize::new(4).unwrap()),
+                min_binding_size: Some(
+                    BufferSize::new(size_of::<TexturePositions>() as _).unwrap(),
+                ),
+            },
+            count: None,
+        },
+        BindGroupLayoutEntry {
+            binding: 2,
+            visibility: ShaderStages::COMPUTE,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: Some(BufferSize::new(8).unwrap()),
             },
             count: Some(blas_count),
         },
         BindGroupLayoutEntry {
-            binding: 2,
+            binding: 3,
             visibility: ShaderStages::COMPUTE,
             ty: BindingType::AccelerationStructure {
                 vertex_return: true,

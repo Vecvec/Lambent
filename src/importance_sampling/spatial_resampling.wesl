@@ -32,7 +32,7 @@ import package::bindings::{
 
 enable wgpu_ray_query;
 @if(vertex_return)
-enable wgpu_ray_vertex_return;
+enable wgpu_ray_query_vertex_return;
 
 fn jacobian_determinant(q:Sample, r:Sample) -> f32 {
     let q1_to_q2 = q.sample_point - q.visible_point;

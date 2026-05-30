@@ -32,7 +32,7 @@ import package::bindings::{
 
 enable wgpu_ray_query;
 @if(vertex_return)
-enable wgpu_ray_vertex_return;
+enable wgpu_ray_query_vertex_return;
 
 const F32_MAX = 3.40282347e+38;
 
