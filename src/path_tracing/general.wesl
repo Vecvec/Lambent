@@ -697,9 +697,6 @@ fn handle_hit(
     }
 
     let coat_normal: PickedNormal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, roughness);
-    // let onb = to_onb((*ray).direction, intersection.normal, intersection.tangent);
-    // hit.albedo = vec3(((onb + 1.0) / 2.0).y);
-    // return hit;
     var reflect_normal = coat_normal;
 
     if (refractive_index != 1.0) {
@@ -782,12 +779,6 @@ fn handle_hit(
         if bounce_idx == 0u {
             (*state).first_pdf = (*state).cached_pdf;
         }
-        // hit.albedo = vec3(f32(dot((*ray).direction, from_onb(to_onb((*ray).direction, intersection.normal, intersection.tangent), intersection.normal, intersection.tangent)) > 0.99));
-        // let dot_prod = dot(-(*ray).direction, reflect_normal.normal);
-        // let dot_prod = reflect_normal.onb_normal.y;
-        // let dot_prod = dot(reflect_normal.onb_normal, to_onb(-(*ray).direction, intersection.normal, intersection.tangent));
-        // hit.albedo = vec3(f32(dot_prod > 0.0), dot_prod, f32(-dot_prod > 0.2));
-        // return hit;
         let old_dir = (*ray).direction;
         (*ray).direction = reflect((*ray).direction, reflect_normal.normal);
         (*state).cached_brdf = get_normal_bsdf(old_dir, (*ray).direction, reflect_normal, intersection.normal, intersection.tangent);
@@ -800,11 +791,6 @@ fn handle_hit(
 
     fill_mc_world_space_states(self_seed, (*ray).origin, intersection.normal, (*ray).direction);
     var s = resample_mcmm(self_seed, (*ray).origin, intersection.normal);
-
-    //sample.color = (normal);
-    //return sample;
-    //sample.color = color;
-    //return sample;
 
     var use_subsurface: bool;
     var use_subsurface_back: bool;
@@ -819,31 +805,16 @@ fn handle_hit(
 
     if (intersection.ty == DIFFUSE) {
         (*state).last_diffuse = true;
-        // old direction code
-        /*let direction = rand_on_sphere(self_seed);
-        let dot = dot(direction, intersection.normal);
-        color = color * abs(dot);
-        if (dot < 0.0) {
-            ray.direction = -direction;
-        } else {
-            ray.direction = direction;
-        }*/
         var dir: vec3<f32>;
-        // var wrs = weighted_reservoir_sampling::WRS_vec4f();
         // Prepare for markov chain
-        //s.light_source = vec3<f32>(0.0, 1.0, 0.0);
         let light_dir = get_light_dir(s, (*ray).origin);
         let mean = normalize(light_dir);
         let kappa = get_kappa(s);
 
         let normal = select(intersection.normal, -intersection.normal, use_subsurface_back);
-        // hit.albedo = vec3(f32(use_subsurface_back));
-        // return hit;
         // Calculate cosine direction
         let dir_cosine = cosine_weighted_hemisphere(*self_seed, normal, intersection.tangent);
         let cosine_pdf = max(dot(dir_cosine, normal) / PI, 0.0);
-        // let cosine_weight = 0.2;
-        // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_cosine, cosine_pdf), cosine_weight, &self_seed);
         // Calculate markov chain direction
         let theta = rand_f32_ptr(self_seed) * TAU;
         let V = vec2<f32>(cos(theta), sin(theta));
@@ -865,44 +836,23 @@ fn handle_hit(
         let confidence_sum = unnormalied_confidences[0] + unnormalied_confidences[1];
         var confidences = array<f32, 2>(unnormalied_confidences[0] / confidence_sum, unnormalied_confidences[1] / confidence_sum);
 
-        // var markov_weight = confidences[1];
-        // if dot(dir_markov, intersection.normal) < 0.0 {
-        //     //markov_weight = 0.0;
-        // }
-        // let markov_chain_pdf = select(all_vmf_pdfs(ray.origin, dir), 0.0, confidences[1] == 0.0);
-        // weighted_reservoir_sampling::add_to_wrs_vec4f(&wrs, vec4(dir_markov, markov_chain_pdf), markov_weight, &self_seed);
         var final_pdf: f32;
         var norm_divisor = 1.0;
         let weight = confidences[0];
         let rand = rand_f32_ptr(self_seed);
         if (rand < weight) {
             dir = dir_cosine;
-            //final_pdf = max(dot(dir, intersection.normal) / PI, 0.0);
             (*state).last_not_vmf = true;
         } else {
             dir = (dir_markov);
-            //final_pdf = vmf_pdf(mean, kappa, dir_markov);
-            //sample.color = (dir_markov + 1) / 2;
-            //return sample;
         }
         let avg_pdf = ((confidences[0] * cosine_pdf) + select(confidences[1] * max(all_vmf_pdfs((*ray).origin, dir), 0.0), 0.0, confidences[1] == 0.0));
 
-        // let avg_pdf = (wrs.current_weight / wrs.weight_sum) * wrs.current_elem.w;
-        // let avg_pdf = cosine_pdf * (cosine_weight / wrs.weight_sum) + markov_chain_pdf * (markov_weight / wrs.weight_sum);
-        // dir = wrs.current_elem.xyz;
         final_pdf = avg_pdf;
         norm_divisor = avg_pdf;
-        //vmf_weight *= avg_pdf;
-        //final_pdf = 1.0;
         // Calculate final pdf
         let diffuse: vec3<f32> = select(make_diffuse(intersection.color_base, (*ray), intersection.normal, intersection.tangent, intersection.roughness.x, dir), vec3(1.0), use_subsurface);
-        //let dot = max(dot(dir, normal), 0.0) / dot(dir, intersection.normal);
-        //color = color * dot;
-        //ray.direction = dir;
-        if (any(strip_NaN_vec3(dir) != dir)) {
-            //sample.color = vec3f(0.0, 1.0, 0.0);
-            //return sample;
-        }
+
         (*state).cached_pdf = final_pdf;
         if bounce_idx == 0u {
             (*state).first_pdf = (*state).cached_pdf;
@@ -916,9 +866,6 @@ fn handle_hit(
         if (bounce_idx == 0) {
             (*sample).pdf = final_pdf;
         }
-        //sample.color = vec3f((diffuse.w));
-        //sample.color = ray.direction;
-        //return sample;
     } else if (intersection.ty == TRANSPARENT) {
         (*state).cached_pdf = 1.0;
         
@@ -941,10 +888,6 @@ fn handle_hit(
         if bounce_idx == 0u {
             (*state).first_pdf = (*state).cached_pdf;
         }
-        //sample.color = vec3f(sign(k), -sign(k), sign(dot(intersection.normal, ray.direction)));
-        //sample.color = vec3f((refractive_index * refractive_index) / 8.0, (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)), f32((1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction)) > 0.25));
-        //sample.color = -normal;
-        //return sample;
     }
     return hit;
 }
