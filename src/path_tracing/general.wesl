@@ -774,6 +774,10 @@ fn handle_hit(
     }
 
     if is_metal || !to_base_substrate || !to_base {
+        // Note for if I decide to importance sample:
+        // technically this pdf should also be multiplied by the jacobian of it
+        // (`1/(4*abs(dot(reflect_normal.normal, (*ray).direction)))``)
+        // but this also should be in the brdf, so everything is fine right now.
         (*state).cached_pdf = reflect_normal.pdf;
         if bounce_idx == 0u {
             (*state).first_pdf = (*state).cached_pdf;
@@ -921,6 +925,7 @@ fn handle_hit(
         //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
 
         if !intersection.thin_walled {
+            // jacobian not present here, see reasoning above in reflection code.
             (*state).cached_pdf = specular_normal.pdf;
             let old_dir = (*ray).direction;
             (*ray).direction = refract((*ray).direction, specular_normal.normal, specular_refractive_index);
