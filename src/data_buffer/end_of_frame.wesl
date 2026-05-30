@@ -1,4 +1,4 @@
-import package::bindings::{ Reservoir, WorldMarcovChainState, };
+import package::bindings::{Reservoir, WorldMarcovChainState,};
 import package::importance_sampling::shared::{ unpack_confidance, pack_confidance };
 
 @group(0) @binding(0)

@@ -3,7 +3,7 @@ var<storage, read_write> input: array<f32>;
 
 @vertex
 fn vertex(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {
-    switch (idx) {
+    switch idx {
         case 0u: {
             return vec4<f32>(3.0, -1.0, 0.0, 1.0);
         }

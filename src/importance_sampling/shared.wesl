@@ -1,4 +1,4 @@
-import package::bindings::{ Reservoir, CompressedInfo, MarcovChainState, world_markov_chains, old_world_markov_chains, near_zero, INVALID_KEY };
+import package::bindings::{Reservoir, CompressedInfo, MarcovChainState, world_markov_chains, old_world_markov_chains, near_zero, INVALID_KEY};
 
 const PI = 3.14159265358979323846264338327950288419716939937510;
 const HALF_PI = PI / 2.0;
@@ -9,7 +9,7 @@ const METALLIC = 1u;
 const TRANSPARENT = 2u;
 const SKY = 0xFFu;
 
-fn len_sqrd(v:vec3<f32>) -> f32 {
+fn len_sqrd(v: vec3<f32>) -> f32 {
     return fma(v.x, v.x, fma(v.y, v.y, (v.z * v.z)));
 }
 
@@ -31,12 +31,12 @@ fn cos_phi(v: vec3<f32>) -> f32 {
     }
 }
 
-fn vec3_near_zero(v:vec3<f32>) -> bool {
+fn vec3_near_zero(v: vec3<f32>) -> bool {
     return near_zero(v.x) && near_zero(v.y) && near_zero(v.z);
 }
 
 // converts from Carteasian coordinates to an orthonormal basis
-fn to_onb(src:vec3<f32>, up:vec3<f32>, tangent:vec3<f32>) -> vec3<f32> {
+fn to_onb(src: vec3<f32>, up: vec3<f32>, tangent: vec3<f32>) -> vec3<f32> {
     let s = tangent;
     let t = cross(up, s);
 
@@ -56,7 +56,7 @@ fn inverse(mat: mat3x3<f32>) -> mat3x3<f32> {
         - (mat[0][2] * mat[1][1] * mat[2][0])
         - (mat[0][0] * mat[1][2] * mat[2][1])
         - (mat[0][1] * mat[1][0] * mat[2][2]);
-    
+
     return mat3x3(
         det2x2(mat[1][1], mat[1][2], mat[2][1], mat[2][2]), -det2x2(mat[0][1], mat[0][2], mat[2][1], mat[2][2]), det2x2(mat[0][1], mat[0][2], mat[1][1], mat[1][2]),
         -det2x2(mat[1][0], mat[1][2], mat[2][0], mat[2][2]), det2x2(mat[0][0], mat[0][2], mat[2][0], mat[2][2]), -det2x2(mat[0][0], mat[0][2], mat[1][0], mat[1][2]),
@@ -80,8 +80,7 @@ struct Sample {
 }
 
 struct WorkgroupLights {
-    samples: array<MarcovChainState>
-}
+    samples: array<MarcovChainState>}
 
 const MAX_CONFIDANCE = 0x7FFFFFFFu;
 
@@ -102,13 +101,13 @@ fn pack_confidance(confidance_valid: ConfidanceValid) -> u32 {
     return packed_confidance_valid;
 }
 
-fn update(s_new:Sample, w_new:f32, reservoir: Reservoir, seed:u32, always_update:bool) -> Reservoir {
+fn update(s_new: Sample, w_new: f32, reservoir: Reservoir, seed: u32, always_update: bool) -> Reservoir {
     var new_reservoir = reservoir;
     new_reservoir.w = new_reservoir.w + w_new;
     var confidance_valid = unpack_confidance(new_reservoir.packed_confidance_valid);
     confidance_valid.confidance++;
     new_reservoir.packed_confidance_valid = pack_confidance(confidance_valid);
-    if (rand_f32(seed) * new_reservoir.w < w_new) {
+    if rand_f32(seed) * new_reservoir.w < w_new {
         assign_sam_to_res(&new_reservoir, s_new);
     }
     return new_reservoir;
@@ -119,7 +118,7 @@ struct MergeReturn {
     picked_r: bool,
 }
 
-fn merge(reservoir: Reservoir, r: Reservoir, p: f32, seed:u32) -> MergeReturn {
+fn merge(reservoir: Reservoir, r: Reservoir, p: f32, seed: u32) -> MergeReturn {
     var picked_r = false;
     var new_reservoir = reservoir;
     var confidance_valid = unpack_confidance(new_reservoir.packed_confidance_valid);
@@ -129,9 +128,9 @@ fn merge(reservoir: Reservoir, r: Reservoir, p: f32, seed:u32) -> MergeReturn {
     new_reservoir.packed_confidance_valid = pack_confidance(confidance_valid);
     new_reservoir.w = new_reservoir.w + w_new;
     // This is exquivelent to what is done in the paper but avoids `INF`s and `NAN`s which are undefined in WGSL.
-    if (rand_f32(seed) * new_reservoir.w < w_new) {
-         assign_sam_to_res(&new_reservoir, sam_from_res(r));
-         picked_r = true;
+    if rand_f32(seed) * new_reservoir.w < w_new {
+        assign_sam_to_res(&new_reservoir, sam_from_res(r));
+        picked_r = true;
     }
     //new_reservoir.W = new_reservoir.w / (p_hat(new_reservoir.sam, u32_to_normalised(new_reservoir.sam.sample_normal), new_reservoir.sam.sample_point));
     return MergeReturn(new_reservoir, picked_r);
@@ -180,7 +179,7 @@ fn from_info(info: Info) -> CompressedInfo {
     return CompressedInfo(array<f32, 9>(info.cam_loc.x, info.cam_loc.y, info.cam_loc.z, info.emission.x, info.emission.y, info.emission.z, info.albedo.x, info.albedo.y, info.albedo.z));
 }
 
-fn p_hat(sam:Sample) -> f32 {
+fn p_hat(sam: Sample) -> f32 {
     //return 1.0 / length(sam.out_radiance);
     //return 1.0;
     //return dot(sam.out_radiance, vec3<f32>(0.333333));
@@ -212,7 +211,7 @@ fn p_hat(sam:Sample) -> f32 {
     }
 }*/
 
-fn pdf(normal:vec3<f32>, in:vec3<f32>, out:vec3<f32>, ty:u32, albedo: vec3<f32>, roughness: f32) -> f32 {
+fn pdf(normal: vec3<f32>, in: vec3<f32>, out: vec3<f32>, ty: u32, albedo: vec3<f32>, roughness: f32) -> f32 {
     /*switch (ty) {
         case METALLIC: {
             if (dot(normal, out) > 0.0) {
@@ -236,7 +235,7 @@ fn pdf(normal:vec3<f32>, in:vec3<f32>, out:vec3<f32>, ty:u32, albedo: vec3<f32>,
 }
 
 /// incoming is the direction of the ray.
-fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, normal: vec3<f32>, reflected: vec3<f32>, roughness:f32, color:vec3<f32>) -> vec3<f32> {
+fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, normal: vec3<f32>, reflected: vec3<f32>, roughness: f32, color: vec3<f32>) -> vec3<f32> {
     let n_dot_l = dot(normal, -reflected);
     let n_dot_v = dot(normal, -incoming);
     let v_dot_l = dot(-incoming, -reflected);
@@ -250,7 +249,7 @@ fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, normal: vec3<f32>
     if s > 0.0 {
         t = max(n_dot_l, n_dot_v);
         // this removes lots of weird dark spots from the image
-        if (near_zero(t)) {
+        if near_zero(t) {
             t = 0.001;
         }
     }
@@ -258,13 +257,13 @@ fn cosine_weighted_to_oren_nayer_improved(incoming: vec3<f32>, normal: vec3<f32>
     return fma(vec3<f32>(b), vec3<f32>(s / t), a);
 }
 
-fn u32_to_normalised(u:u32) -> vec3<f32> {
+fn u32_to_normalised(u: u32) -> vec3<f32> {
     var v: vec3<f32>;
     let unpacked = unpack2x16snorm(u);
     v.x = unpacked.x;
     v.z = unpacked.y;
     v.y = 1.0 - (abs(v.x) + abs(v.z));
-    if (v.y < 0.0) {
+    if v.y < 0.0 {
         let x = v.x;
         v.x = copy_sign(x, 1.0 - abs(v.z));
         v.z = copy_sign(v.z, 1.0 - abs(x));
@@ -272,26 +271,25 @@ fn u32_to_normalised(u:u32) -> vec3<f32> {
     return normalize(v);
 }
 
-fn float_sign(f:f32) -> f32 {
-    if (f < 0.0) {
+fn float_sign(f: f32) -> f32 {
+    if f < 0.0 {
         return -1.0;
     } else {
         return 1.0;
     }
 }
 
-fn copy_sign(src:f32, dst: f32) -> f32 {
+fn copy_sign(src: f32, dst: f32) -> f32 {
     let abs_dst = abs(dst);
-    if (src < 0.0) {
+    if src < 0.0 {
         return -abs_dst;
     } else {
         return abs_dst;
     }
 }
 
-
 // pseudo random number generator using a pcg hash
-fn rand_u32(own_seed:u32) -> u32 {
+fn rand_u32(own_seed: u32) -> u32 {
     let state = own_seed * 747796405u + 2891336453u;
     let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     return ((word >> 22u) ^ word);
@@ -300,22 +298,22 @@ fn rand_u32(own_seed:u32) -> u32 {
 const U32_MAX = 0xFFFFFFFFu;
 const RECIP_U32_MAX = 1.0 / f32(U32_MAX);
 
-fn rand_f32(own_seed:u32) -> f32 {
+fn rand_f32(own_seed: u32) -> f32 {
     var seed = own_seed;
     return rand_f32_ptr(&seed);
 }
 
-fn rand_f32_ptr(own_seed:ptr<function, u32>) -> f32 {
+fn rand_f32_ptr(own_seed: ptr<function, u32>) -> f32 {
     *own_seed = rand_u32(*own_seed);
     // fract is to handle edge cases (divide not being perfect)
     return fract(f32(*own_seed) * RECIP_U32_MAX);
 }
 
-fn rand_vec3_f32(own_seed:ptr<function, u32>) -> vec3<f32> {
+fn rand_vec3_f32(own_seed: ptr<function, u32>) -> vec3<f32> {
     return vec3(rand_f32_ptr(own_seed), rand_f32_ptr(own_seed), rand_f32_ptr(own_seed));
 }
 
-fn rand_xz_vec3_f32(own_seed:ptr<function, u32>) -> vec3<f32> {
+fn rand_xz_vec3_f32(own_seed: ptr<function, u32>) -> vec3<f32> {
     return vec3(rand_f32_ptr(own_seed), 0.0, rand_f32_ptr(own_seed));
 }
 
@@ -324,7 +322,7 @@ fn safe_div(numerator: f32, denominator: f32) -> f32 {
 }
 
 fn div_or(numerator: f32, denominator: f32, or: f32) -> f32 {
-    if (near_zero(denominator))  {
+    if near_zero(denominator) {
         return or;
     } else {
         return numerator / denominator;
@@ -332,7 +330,7 @@ fn div_or(numerator: f32, denominator: f32, or: f32) -> f32 {
 }
 
 fn safe_div_vec3(numerator: vec3<f32>, denominator: f32) -> vec3<f32> {
-    if (near_zero(denominator))  {
+    if near_zero(denominator) {
         return vec3<f32>(0.0);
     } else {
         return numerator / denominator;
@@ -342,7 +340,7 @@ fn safe_div_vec3(numerator: vec3<f32>, denominator: f32) -> vec3<f32> {
 // Moved the number in the paper outside to a constant.
 const MARCOV_CHAIN_SAMPLE_CLAMP = 1024;
 
-fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat: f32, seed: u32, not_vmf: bool, old_state: MarcovChainState, confidence: f32, sum_mc: f32, num_resamples: u32) -> MarcovChainState {
+fn update_marcov_state(/* x0: vec3<f32>, */x1: vec3<f32>, x2: vec3<f32>, p_hat: f32, seed: u32, not_vmf: bool, old_state: MarcovChainState, confidence: f32, sum_mc: f32, num_resamples: u32) -> MarcovChainState {
     var state = old_state;
     if not_vmf {
         // While the origional paper used this, the newer one instead resets if it couldn't find the light
@@ -356,7 +354,7 @@ fn update_marcov_state(/* x0: vec3<f32>, */ x1: vec3<f32>, x2: vec3<f32>, p_hat:
         tentative_marcov_chain_state.weight_sum = score;
         tentative_marcov_chain_state.light_source = score * x2;
         tentative_marcov_chain_state.mean_cosine = score;
-    } else */if ((rand * sum_mc) < (p_hat * f32(num_resamples))) {
+    } else */if (rand * sum_mc) < (p_hat * f32(num_resamples)) {
         if near_zero(length(get_light_dir(state, x1))) {
             return state;
         }
@@ -378,8 +376,8 @@ fn get_light_dir(state: MarcovChainState, current: vec3<f32>) -> vec3<f32> {
     //return state.light_source - current;
 }
 
-const F32_EXP_FIELD:u32 = 0x7F800000;
-const F32_SIGN_FEILD:u32 = 0x80000000;
+const F32_EXP_FIELD: u32 = 0x7F800000;
+const F32_SIGN_FEILD: u32 = 0x80000000;
 
 fn strip_NaN(float: f32) -> f32 {
     let is_nan_or_inf = (bitcast<u32>(float) & F32_EXP_FIELD) == F32_EXP_FIELD;
@@ -412,7 +410,7 @@ fn quantize_packed2x16snorm(initial: u32) -> u32 {
 fn incoming_hash(vector: vec3<f32>) -> u32 {
     var hash = 0u;
 
-    hash |= u32(vector.x > 0.0) << 0; 
+    hash |= u32(vector.x > 0.0) << 0;
     hash |= u32(vector.y > 0.0) << 1;
     hash |= u32(vector.z > 0.0) << 2;
 
@@ -465,8 +463,8 @@ fn grid_load(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, camera_loc:
     s.weight_sum = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.weight_sum));
     s.num_samples = atomicLoad(&world_markov_chains[idx].chain.num_samples);
     s.score = bitcast<f32>(atomicLoad(&world_markov_chains[idx].chain.score));
-    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hasher(grid_pos, normal, incoming) || force_old) {
-        if (atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming)) {
+    if atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hasher(grid_pos, normal, incoming) || force_old {
+        if atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming) {
             s.light_source.x = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[0]));
             s.light_source.y = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[1]));
             s.light_source.z = bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].chain.light_source[2]));
@@ -494,7 +492,7 @@ fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
-    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash) {
+    if atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash {
         if !(atomicCompareExchangeWeak(&world_markov_chains[idx].secondary_hash, INVALID_KEY, secondary_hash).exchanged) {
             return;
         }
@@ -509,10 +507,10 @@ fn grid_store_markov_chain(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32
     world_markov_chains[idx].timeout = CACHE_TIMEOUT;
 }
 
-fn normalised_to_u32(normalized:vec3<f32>) -> u32 {
+fn normalised_to_u32(normalized: vec3<f32>) -> u32 {
     let v = normalized / max((abs(normalized.x) + abs(normalized.y) + abs(normalized.z)), 0.01);
     var out = 0u;
-    if (v.y >= 0.0) {
+    if v.y >= 0.0 {
         out = pack2x16snorm(v.xz);
     } else {
         //out = pack2x16unorm(vec2<f32>((encode_axis(v.x)), (encode_axis(v.z))));

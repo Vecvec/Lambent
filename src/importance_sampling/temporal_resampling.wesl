@@ -1,3 +1,5 @@
+//! Can't run wgsl format as wesl parser doesn't like it
+
 import super::shared::{ rand_u32, Sample, u32_to_normalised, safe_div, len_sqrd, unpack_confidance, p_hat, sam_from_res, merge, to_info, DIFFUSE, METALLIC, TRANSPARENT, SKY };
 import package::bindings::{
     // Types
