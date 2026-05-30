@@ -111,10 +111,10 @@ fn ray_hit(ray: Ray) -> vec3<f32> {
     let intersection = rayQueryGetCommittedIntersection(&rq);
     if intersection.kind != RAY_QUERY_INTERSECTION_NONE {
         var vertices: array<vec3<f32>, 3>;
-        @if vertex_return {
+        @if (vertex_return) {
             vertices = getCommittedVertexPositions(&rq);
         }
-        @if !vertex_return {
+        @if (!vertex_return) {
             vertices = get_vertices(rayQueryGetCommittedIntersection(&rq));
         }
         return normalize(vertices[0] - vertices[1]);

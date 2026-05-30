@@ -1055,10 +1055,10 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         var tangent: vec3<f32>;
         if intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE {
             var vertices: array<vec3<f32>, 3>;
-            @if vertex_return {
+            @if (vertex_return) {
                 vertices = getCommittedVertexPositions(&rq);
             }
-            @if !vertex_return {
+            @if (!vertex_return) {
                 vertices = get_vertices(rayQueryGetCommittedIntersection(&rq));
             }
             tangent = correct_tangent(normalize(vertices[0] - vertices[1]));
