@@ -540,9 +540,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push: bool) -> SampleReturn
             // return sample;
 
             color *= hit.albedo;
-            if !(i == 0u) {
-                out_radiance_colour *= hit.albedo;
-            }
+            out_radiance_colour *= hit.albedo;
 
             if i == 0 {
                 hit_state.first_dir = ray.direction;
