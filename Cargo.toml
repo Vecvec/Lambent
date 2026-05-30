@@ -16,8 +16,7 @@ bytemuck = { version =  "1.22.0", features = ["derive"] }
 cgmath = "0.18"
 half = "2.4.1"
 bitflags = "2.9"
-# wesl = { version = "0.3.0", features = ["naga-ext"] }
-wesl = { path = "../wesl-rs/crates/wesl", features = ["naga-ext"] }
+wesl = { version = "0.4.0", features = ["naga-ext"] }
 
 [dependencies.image]
 version = "0.25.1"
@@ -30,8 +29,7 @@ env_logger = "0.11"
 glfw = "0.59.0"
 
 [build-dependencies]
-# wesl = { version = "0.3.0", features = ["naga-ext"] }
-wesl = { path = "../wesl-rs/crates/wesl", features = ["naga-ext"] }
+wesl = { version = "0.4.0", features = ["naga-ext"] }
 
 [features]
 wip-features = []

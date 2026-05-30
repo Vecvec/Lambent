@@ -30,7 +30,7 @@ struct Ray {
     origin: vec3f,
 }
 
-var<push_constant> seed_offset:u32;
+var<immediate> seed_offset:u32;
 
 @workgroup_size(64, 1, 1)
 @compute
