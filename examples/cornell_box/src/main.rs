@@ -966,7 +966,8 @@ impl<'a> OidnState<'a> {
         recv.recv_timeout(Duration::from_secs(5)).unwrap();
         let (send, recv) = mpsc::channel();
         let mut data: Vec<f32> =
-            bytemuck::cast_slice(&self.wgpu_map_read.slice(..).get_mapped_range().unwrap()).to_vec();
+            bytemuck::cast_slice(&self.wgpu_map_read.slice(..).get_mapped_range().unwrap())
+                .to_vec();
         self.wgpu_map_read.unmap();
         self.buf.write(&data);
         self.filter.filter_in_place_buffer(&mut self.buf).unwrap();
