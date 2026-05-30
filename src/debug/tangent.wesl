@@ -19,7 +19,7 @@ import package::bindings::{
 };
 
 @if(!vertex_return)
-import package::bindings::{ get_vertices, };
+import package::bindings::{get_vertices,};
 
 enable wgpu_ray_query;
 enable wgpu_binding_array;
@@ -33,7 +33,7 @@ struct Ray {
     origin: vec3f,
 }
 
-var<immediate> seed_offset:u32;
+var<immediate> seed_offset: u32;
 
 @workgroup_size(64, 1, 1)
 @compute
@@ -60,14 +60,14 @@ fn rt_sample(coord: vec2<u32>) -> SampleReturn {
     let x_largest = abs_dir.x > abs_dir.y && abs_dir.x > abs_dir.z;
     let y_largest = abs_dir.y > abs_dir.x && abs_dir.y > abs_dir.z;
     var reverse_dir: bool;
-    if (x_largest) {
+    if x_largest {
         reverse_dir = dir.x < 0.0;
-    } else if (y_largest) {
+    } else if y_largest {
         reverse_dir = dir.y < 0.0;
     } else {
         reverse_dir = dir.z < 0.0;
     }
-    if (reverse_dir) {
+    if reverse_dir {
         dir = -dir;
     }
     sample.color = (dir + 1.0) / 2.0;
@@ -79,28 +79,28 @@ struct Hit {
     depth: f32,
 }
 
-override T_MIN:f32 = 0.001;
-override T_MAX:f32 = 1000.0;
+override T_MIN: f32 = 0.001;
+override T_MAX: f32 = 1000.0;
 
 fn ray_hit(ray: Ray) -> vec3<f32> {
     var rq: ray_query_maybe_vertex_return;
     rayQueryInitialize(&rq, acc_struct, RayDesc(0u, 0xFFu, T_MIN, T_MAX, ray.origin, ray.direction));
     var aabb_normal: vec3<f32>;
     var aabb_tangent: vec3<f32>;
-    while (rayQueryProceed(&rq)) {
+    while rayQueryProceed(&rq) {
         let intersection = rayQueryGetCandidateIntersection(&rq);
-        if (intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE) {
+        if intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE {
             let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index][0]];
             let tex_pos = tex_pos[material_idx[intersection.instance_index].materials[intersection.primitive_index][1]];
             let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
             let tex_coords_float = fma(unpack2x16float(tex_pos.tex_pos_base_colour_1), vec2<f32>(bary.z), fma(unpack2x16float(tex_pos.tex_pos_base_colour_2), vec2<f32>(bary.x), (unpack2x16float(tex_pos.tex_pos_base_colour_3) * bary.y)));
             let idx_diffuse = unpack_2xu16(material.tex_idx_base_colour_emission).x;
-            if (!near_zero(textureSampleLevel(textures[idx_diffuse], sam, tex_coords_float, intersection.t).w)) {
+            if !near_zero(textureSampleLevel(textures[idx_diffuse], sam, tex_coords_float, intersection.t).w) {
                 rayQueryConfirmIntersection(&rq);
             }
-        } else if (intersection.kind == RAY_QUERY_INTERSECTION_AABB) {
+        } else if intersection.kind == RAY_QUERY_INTERSECTION_AABB {
             let aabb_intersection = intersect(intersection);
-            if (aabb_intersection.hit) {
+            if aabb_intersection.hit {
                 aabb_normal = aabb_intersection.normal;
                 aabb_tangent = aabb_intersection.tangent;
                 let t = aabb_intersection.t;
@@ -109,12 +109,12 @@ fn ray_hit(ray: Ray) -> vec3<f32> {
         }
     }
     let intersection = rayQueryGetCommittedIntersection(&rq);
-    if (intersection.kind != RAY_QUERY_INTERSECTION_NONE) {
+    if intersection.kind != RAY_QUERY_INTERSECTION_NONE {
         var vertices: array<vec3<f32>, 3>;
-        @if(vertex_return) {
+        @if vertex_return {
             vertices = getCommittedVertexPositions(&rq);
         }
-        @if(!vertex_return) {
+        @if !vertex_return {
             vertices = get_vertices(rayQueryGetCommittedIntersection(&rq));
         }
         return normalize(vertices[0] - vertices[1]);

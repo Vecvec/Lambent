@@ -1,4 +1,4 @@
-import package::default_mode::{ get_normal, conv_rough, make_diffuse, pick_ref_idx, pick_ref_idx_blend, get_normal_bsdf };
+import package::default_mode::{get_normal, conv_rough, make_diffuse, pick_ref_idx, pick_ref_idx_blend, get_normal_bsdf};
 import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, grid_loc, grid_load, grid_store_markov_chain, strip_NaN_vec3, normalised_to_u32, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, CACHE_TIMEOUT, };
 import package::bindings::{
     // Types
@@ -40,7 +40,7 @@ import package::bindings::{
 import package::path_tracing::weighted_reservoir_sampling;
 
 @if(!vertex_return)
-import package::bindings::{ get_vertices, };
+import package::bindings::{get_vertices,};
 
 enable wgpu_ray_query;
 enable wgpu_binding_array;
@@ -96,8 +96,8 @@ fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3
     var num_samples = atomicLoad(&world_markov_chains[idx].num_samples);
     var float_radiance = vec3<f32>(bitcast<f32>(atomicLoad(&world_markov_chains[idx].luminance[0])), bitcast<f32>(atomicLoad(&world_markov_chains[idx].luminance[1])), bitcast<f32>(atomicLoad(&world_markov_chains[idx].luminance[2])));
     let secondary_hash = atomicLoad(&world_markov_chains[idx].secondary_hash);
-    if (secondary_hash != secondary_hasher(grid_pos, normal, incoming)) {
-        if (atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming)) {
+    if secondary_hash != secondary_hasher(grid_pos, normal, incoming) {
+        if atomicLoad(&old_world_markov_chains[idx].secondary_hash) == secondary_hasher(grid_pos, normal, incoming) {
             num_samples = atomicLoad(&old_world_markov_chains[idx].num_samples);
             float_radiance = vec3<f32>(bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].luminance[0])), bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].luminance[1])), bitcast<f32>(atomicLoad(&old_world_markov_chains[idx].luminance[2])));
         } else {
@@ -106,7 +106,7 @@ fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3
     } else {
         world_markov_chains[idx].timeout = CACHE_TIMEOUT;
     }
-    if (num_samples == 0) {
+    if num_samples == 0 {
         return vec3(0.0);
     }
     let radiance = float_radiance / f32(num_samples);
@@ -114,13 +114,13 @@ fn grid_load_radiance_estimate(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3
     return clamped_radiance;
 }
 
-fn grid_add_radiance(pos:vec3<f32>, normal:vec3<f32>, incoming: vec3<f32>, radiance: vec3<f32>) {
+fn grid_add_radiance(pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>, radiance: vec3<f32>) {
     let grid_pos = grid_loc(pos, camera_loc);
     let hash = primary_hasher(grid_pos, normal, incoming);
     let idx = hash % arrayLength(&world_markov_chains);
     let secondary_hash = secondary_hasher(grid_pos, normal, incoming);
     let clamped_radiance = clamp(radiance, vec3(0.0), vec3(100.0));
-    if (atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash) {
+    if atomicLoad(&world_markov_chains[idx].secondary_hash) != secondary_hash {
         if !(atomicCompareExchangeWeak(&world_markov_chains[idx].secondary_hash, INVALID_KEY, secondary_hash).exchanged) {
             return;
         }
@@ -138,7 +138,7 @@ fn grid_add_radiance(pos:vec3<f32>, normal:vec3<f32>, incoming: vec3<f32>, radia
         return;
     }*/
     let num_samples = atomicLoad(&world_markov_chains[idx].num_samples);
-    if (num_samples >= MAX_NUM_SAMPLES) {
+    if num_samples >= MAX_NUM_SAMPLES {
         atomicStore(&world_markov_chains[idx].lock, STATE_UNLOCKED);
         world_markov_chains[idx].timeout = CACHE_TIMEOUT;
         return;
@@ -154,16 +154,7 @@ fn grid_add_radiance(pos:vec3<f32>, normal:vec3<f32>, incoming: vec3<f32>, radia
     world_markov_chains[idx].timeout = CACHE_TIMEOUT;
 }
 
-fn brightness(max:f32, odds: f32) -> f32 {
-    return odds;
-    //return odds * 32.0;
-    //return odds * 400.0;
-    //return odds * 4.0;
-    //return odds * 80.0;
-    //return 4.0;
-}
-
-var<immediate> seed_offset:u32;
+var<immediate> seed_offset: u32;
 
 override IS_SAMPLES = 64u;
 
@@ -195,11 +186,11 @@ const NUM_RESAMPLES = NUM_NON_PIXEL_RESAMPLES + 1;
 //const NUM_NON_PIXEL_RESAMPLES = 0;
 var<private> other_pixels_marcov_chain_states: MarcovChainHolder;
 
-fn shuffle_marcov_chain(next_subgroup:u32) {
+fn shuffle_marcov_chain(next_subgroup: u32) {
     tentative_marcov_chain_state = get_tentative_marcov_chain(next_subgroup);
 }
 
-fn get_tentative_marcov_chain(subgroup_id:u32) -> MarcovChainState {
+fn get_tentative_marcov_chain(subgroup_id: u32) -> MarcovChainState {
     return MarcovChainState(
         subgroupShuffle(tentative_marcov_chain_state.light_source, subgroup_id),
         subgroupShuffle(tentative_marcov_chain_state.mean_cosine, subgroup_id),
@@ -254,7 +245,7 @@ fn fill_mc_world_space_states(own_seed: ptr<function, u32>, pos: vec3<f32>, norm
         let force_self = i == 0;
         let rand_candidate = rand_f32(*own_seed) < 0.7 && !force_self;
         let jitter_mul = select(select(1.0, 0.75, rand_candidate), 0.0, force_self);
-        let jitter = rand_xz_vec3_f32(own_seed)*JITTER_SIZE*jitter_mul;
+        let jitter = rand_xz_vec3_f32(own_seed) * JITTER_SIZE * jitter_mul;
         let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, camera_loc, rand_candidate);
         other_pixels_marcov_chain_states.state[i] = s;
         *own_seed++;
@@ -330,14 +321,14 @@ const RESTIR_OPTION_PER_PIXEL: u32 = 2;
 
 @workgroup_size(64, 1, 1)
 @compute
-fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) work_id: vec3<u32>, @builtin(subgroup_size) sub_size:u32, @builtin(subgroup_invocation_id) sub_id: u32) {
+fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) work_id: vec3<u32>, @builtin(subgroup_size) sub_size: u32, @builtin(subgroup_invocation_id) sub_id: u32) {
     let screen_size = textureDimensions(output);
-    if (id.x > screen_size.x || id.y > screen_size.y) {
+    if id.x > screen_size.x || id.y > screen_size.y {
         return;
     }
     let idx = id.x + (id.y * screen_size.x);
     tentative_marcov_chain_state = old_markov_chains[idx];
-    let x = f32(id.y)/f32(screen_size.y);
+    let x = f32(id.y) / f32(screen_size.y);
     var own_seed = rand_u32((id.x * id.y)) + seed_offset + id.y;
     var pixel_color = vec3<f32>();
     var pixel_normal: vec3<f32>;
@@ -368,12 +359,12 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
         //pixel_color = pixel_color + ray_sample.out_radiance;
         own_seed = rand_u32(own_seed);
 
-        if (ray_sample.color.x < 0.0 || ray_sample.color.y < 0.0 || ray_sample.color.z < 0.0) {
+        if ray_sample.color.x < 0.0 || ray_sample.color.y < 0.0 || ray_sample.color.z < 0.0 {
             //textureStore(output, id.xy, vec4<f32>(0.0, 1.0, 0.0, 1.0));
             //return;
         }
         if RESTIR == RESTIR_OPTION_PER_PIXEL {
-            if (ray_sample.valid) {
+            if ray_sample.valid {
                 sample_valid = true;
                 sample = Sample(
                     ray_sample.visible_point,
@@ -394,7 +385,7 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
                 ray_sample.ty,
                 conv_rough(ray_sample.roughness),
             );
-            if (sample.ty != SKY && ray_sample.valid) {
+            if sample.ty != SKY && ray_sample.valid {
                 let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
                 R = update(sample, w, R, own_seed, false);
                 own_seed = rand_u32(own_seed);
@@ -418,7 +409,7 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(workgroup_id) 
 
     // put collective samples into GI
     if RESTIR == RESTIR_OPTION_PER_PIXEL {
-        if (sample.ty != SKY && sample_valid) {
+        if sample.ty != SKY && sample_valid {
             let w = p_hat(sample); // Don't think `/ pdf` should be here, in the paper it's here but it's probably part of the out radiance.
             R = update(sample, w, R, own_seed, false);
             own_seed = rand_u32(own_seed);
@@ -443,10 +434,10 @@ struct SampleReturn {
     visible_point: vec3<f32>,
     visible_normal: vec3<f32>,
     out_radiance: vec3<f32>,
-    ty:u32,
+    ty: u32,
     roughness: f32,
     valid: bool,
-    pdf:f32,
+    pdf: f32,
 }
 
 struct DiffuseReturn {
@@ -464,7 +455,7 @@ struct RISDirections {
     weight: f32,
 }
 
-fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn {
+fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push: bool) -> SampleReturn {
     var self_seed = own_seed;
     var ray = create_ray(coord);
     // add to sample when hitting a light source
@@ -489,13 +480,13 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
 
     var last_diffuse = false;
     let mul = pick_ref_idx_blend(&picked, self_seed);
-    
+
     color *= mul;
     out_radiance_colour *= mul;
 
     for (var i = 0u; i < BOUNCES; i++) {
         let intersection = ray_hit(&ray);
-        if (intersection.hit) {
+        if intersection.hit {
             let new_pos = at(&ray, intersection.t);
             // We have at least hit the scene twice (this is our second time)
             if i != 0u {
@@ -516,12 +507,12 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
             hit_state.last_diffuse = false;
             ray.origin = new_pos;
 
-            if (i == 0u) {
+            if i == 0u {
                 sample.point = ray.origin;
                 sample.ty = intersection.ty;
                 //sample.roughness = intersection.roughness;
                 sample.normal = intersection.normal;
-            } else if (i == 1u) {
+            } else if i == 1u {
                 // dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.5, 1.0, 0.5) - camera_loc)) / 500.0);
                 // dbg_out = vec3(all_vmf_pdfs(camera_loc, normalize(vec3(0.62, 0.66, 0.44) - camera_loc)) / 100.0);
                 sample.visible_point = ray.origin;
@@ -537,11 +528,11 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
                 //sample.color = vec3f(intersection.tri_area);
                 //return sample;
             }*/
-            
+
             let hit = handle_hit(&hit_state, i, intersection, &ray, &sample, &picked, &self_seed);
-            
+
             sample.color = fma(color, hit.emission, sample.color);
-            if (!(i == 0u)) {
+            if !(i == 0u) {
                 sample.out_radiance = fma(out_radiance_colour, hit.emission, sample.out_radiance);
             }
 
@@ -549,7 +540,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
             // return sample;
 
             color *= hit.albedo;
-            if (!(i == 0u)) {
+            if !(i == 0u) {
                 out_radiance_colour *= hit.albedo;
             }
 
@@ -564,11 +555,11 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push:bool) -> SampleReturn 
             let bg_color = background(&ray);
             // if it's our first hit it doesn't matter, but we should resample the sky sometimes
             let new_pos = at(&ray, T_MAX);
-            if (i == 1u) {
+            if i == 1u {
                 sample.visible_point = new_pos;
                 sample.visible_normal = -ray.direction;
             }
-            if (!(i == 0u)) {
+            if !(i == 0u) {
                 sample.out_radiance = fma(out_radiance_colour, bg_color, sample.out_radiance);
 
                 // update markov chains
@@ -644,7 +635,7 @@ struct RefractionChecks {
 
 fn check_refract(dir: vec3<f32>, normal: vec3<f32>, refractive_index: f32) -> RefractionChecks {
     let cos_theta = min(dot(-dir, normal), 1.0);
-    let sin_theta = sqrt(1.0 - (cos_theta*cos_theta));
+    let sin_theta = sqrt(1.0 - (cos_theta * cos_theta));
     let cannot_refract = (refractive_index * sin_theta) > 1.0;
     return RefractionChecks(cos_theta, cannot_refract);
 }
@@ -675,7 +666,7 @@ fn handle_hit(
 ) -> FinalizedHit {
     var roughness = intersection.roughness_specular;
     var hit = FinalizedHit_new();
-    
+
     // coated-base
 
     // First, possibly skip this
@@ -689,7 +680,7 @@ fn handle_hit(
     let colour_refractive_index = pick_ref_idx(picked, intersection.refractive_index_low, intersection.refractive_index_high, *self_seed);
     var refractive_index = colour_refractive_index;
     *self_seed = *self_seed + 1u;
-    if (!intersection.front_face && intersection.ty == TRANSPARENT) {
+    if !intersection.front_face && intersection.ty == TRANSPARENT {
         // disable the coat reflection if we are exiting a coated transparent
         refractive_index = 1.0;
     } else {
@@ -699,12 +690,12 @@ fn handle_hit(
     let coat_normal: PickedNormal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, roughness);
     var reflect_normal = coat_normal;
 
-    if (refractive_index != 1.0) {
+    if refractive_index != 1.0 {
         let checks = check_refract((*ray).direction, coat_normal.normal, refractive_index);
         // REMEMBER: Looking from inside a material looks odd, but this seems to be correct.
         let pdf = reflectance(checks.cos, refractive_index);
         let rand = rand_f32_ptr(self_seed);
-        if ((checks.cannot_refract || (pdf > rand))) {
+        if (checks.cannot_refract || (pdf > rand)) {
             roughness = intersection.roughness_coat;
             to_base_substrate = false;
         }
@@ -733,12 +724,12 @@ fn handle_hit(
     var specular_refractive_index = pick_ref_idx(picked, intersection.specular_refractive_index_low, intersection.specular_refractive_index_high, *self_seed);
     *self_seed = *self_seed + 1u;
     // Don't have to check if it is thin walled as front_face is always true in this case.
-    if (!intersection.front_face && intersection.ty == TRANSPARENT) {
+    if !intersection.front_face && intersection.ty == TRANSPARENT {
         specular_refractive_index = specular_refractive_index;
     } else {
         specular_refractive_index = 1.0 / specular_refractive_index;
     }
-    
+
     let specular_normal: PickedNormal = get_normal((*ray).direction, intersection.normal, intersection.tangent, *self_seed, intersection.roughness_specular);
 
     var to_base = true;
@@ -756,13 +747,13 @@ fn handle_hit(
         let F_82 = F_Schlick - (((cos * pow(1.0 - cos, 6.0)) / REWEIGHT) * (F_Schlick_1_7 - F));
 
         hit.albedo *= F_82 * intersection.color_specular.w;
-    } else {    
-        if (specular_refractive_index != 1.0) {
+    } else {
+        if specular_refractive_index != 1.0 {
             let checks = check_refract((*ray).direction, specular_normal.normal, specular_refractive_index);
             // REMEMBER: Looking from inside a material looks odd, but this seems to be correct.
             let pdf = reflectance(checks.cos, specular_refractive_index);
             let rand = rand_f32_ptr(self_seed);
-            if ((checks.cannot_refract || (pdf > rand))) {
+            if (checks.cannot_refract || (pdf > rand)) {
                 reflect_normal = specular_normal;
                 to_base = false;
                 hit.albedo *= intersection.color_specular.xyz;
@@ -803,7 +794,7 @@ fn handle_hit(
 
     hit.albedo *= select(intersection.color_base.xyz, intersection.color_subsurface.xyz, use_subsurface);
 
-    if (intersection.ty == DIFFUSE) {
+    if intersection.ty == DIFFUSE {
         (*state).last_diffuse = true;
         var dir: vec3<f32>;
         // Prepare for markov chain
@@ -823,13 +814,13 @@ fn handle_hit(
         let W_minus_1 = ((log(1.0 + (xi * exp_minus_one(minus_2_kappa))) / kappa));
         var W = 1.0 + W_minus_1;
         // slightly more precise than `sqrt(1.0 - (W*W))`
-        let norm_V = sqrt(-fma(W_minus_1, W_minus_1, 2*W_minus_1));
+        let norm_V = sqrt(-fma(W_minus_1, W_minus_1, 2 * W_minus_1));
         let Xs = from_onb_no_tangent(vec3(strip_NaN(V.x * norm_V), W, strip_NaN(V.y * norm_V)), mean);
         let dir_markov = normalize(Xs);
         // Calculate pdf of cosine for cosine direction
         var unnormalied_confidences = array<f32, 2>(0.5, 0.5);
         //var unnormalied_confidences = array<f32, 2>(0.8 , 0.2);
-        if (!marcov_chain_valid(s) || near_zero(length(light_dir)) || near_zero(s.weight_sum) || near_zero(length(Xs))) {
+        if !marcov_chain_valid(s) || near_zero(length(light_dir)) || near_zero(s.weight_sum) || near_zero(length(Xs)) {
             unnormalied_confidences[0] = 1.0;
             unnormalied_confidences[1] = 0.0;
         }
@@ -840,7 +831,7 @@ fn handle_hit(
         var norm_divisor = 1.0;
         let weight = confidences[0];
         let rand = rand_f32_ptr(self_seed);
-        if (rand < weight) {
+        if rand < weight {
             dir = dir_cosine;
             (*state).last_not_vmf = true;
         } else {
@@ -863,12 +854,12 @@ fn handle_hit(
 
         (*ray).direction = dir;
         (*state).previously_diffuse = true;
-        if (bounce_idx == 0) {
+        if bounce_idx == 0 {
             (*sample).pdf = final_pdf;
         }
-    } else if (intersection.ty == TRANSPARENT) {
+    } else if intersection.ty == TRANSPARENT {
         (*state).cached_pdf = 1.0;
-        
+
         //let k = 1.0 - refractive_index * refractive_index * (1.0 - dot(intersection.normal, ray.direction) * dot(intersection.normal, ray.direction));
 
         if !intersection.thin_walled {
@@ -892,19 +883,19 @@ fn handle_hit(
     return hit;
 }
 
-fn u32_to_colour(u:u32) -> vec3<f32> {
+fn u32_to_colour(u: u32) -> vec3<f32> {
     let r = (0xFFE00000 & u) >> 20;
     let g = (0xFFC00 & u) >> 10;
     let b = (0x3FF & u);
     return vec3<f32>(f32(r) / f32(0x7FF), f32(g) / f32(0x3FF), f32(b) / f32(0x3FF));
 }
 
-fn all_vmf_pdfs(hit:vec3<f32>, direction:vec3<f32>) -> f32 {
+fn all_vmf_pdfs(hit: vec3<f32>, direction: vec3<f32>) -> f32 {
     var pdfs = 0.0;
-    if (sum_mc > 0.0) {
+    if sum_mc > 0.0 {
         for (var i = 0; i < NUM_RESAMPLES; i++) {
             let s = other_pixels_marcov_chain_states.state[i];
-            if (!marcov_chain_valid(s)) {
+            if !marcov_chain_valid(s) {
                 continue;
             }
             pdfs += (vmf_pdf(normalize(get_light_dir(s, hit)), get_kappa(s), direction)) * (s.weight_sum / sum_mc);
@@ -928,45 +919,44 @@ fn get_kappa(state: MarcovChainState) -> f32 {
     // We don't want this to be zero or infinity
     // These values are large due to the large amount of floating point inacuracies there are
     //return max((3.0 * r) - (r*r*r) / max(1 - (r*r), 1.17549435E-38f), 1.17549435E-38f);
-    return clamp(((3.0 * r) - (r*r*r)) / (1.0 - (r*r)), 0.001, 8.50705867e37);
+    return clamp(((3.0 * r) - (r * r * r)) / (1.0 - (r * r)), 0.001, 8.50705867e37);
     //return (((3.0 * r) - (r*r*r)) / (1.0 - (r*r)));
     //return 1000.0;
 }
 
-fn vmf_pdf(mean:vec3<f32>, kappa:f32, direction:vec3<f32>) -> f32 {
+fn vmf_pdf(mean: vec3<f32>, kappa: f32, direction: vec3<f32>) -> f32 {
     let minus_2_kappa = -2.0 * kappa;
     let fraction = x_divided_by_exp_minus_one(minus_2_kappa) / (4.0 * PI);
     let cos_theta = dot(direction, mean);
-    return max(fraction*exp(kappa * (cos_theta - 1.0)), 0.0);
+    return max(fraction * exp(kappa * (cos_theta - 1.0)), 0.0);
 }
 
 fn exp_minus_one(x: f32) -> f32 {
     let u = exp(x);
-    if (u == 1.0) {
+    if u == 1.0 {
         return x;
     }
     let y = u - 1.0;
-    if (abs(x) < 1.0) {
+    if abs(x) < 1.0 {
         return (x * y) / log(u);
     }
     return y;
 }
 
-fn x_divided_by_exp_minus_one(x:f32) -> f32 {
+fn x_divided_by_exp_minus_one(x: f32) -> f32 {
     let u = exp(x);
-    if (u == 1.0) {
+    if u == 1.0 {
         return 1.0;
     }
     let y = u - 1.0;
-    if (abs(x) < 1.0) {
+    if abs(x) < 1.0 {
         return log(u) / y;
     }
     return x / y;
 }
 
-override T_MIN:f32;
-override T_MAX:f32;
-
+override T_MIN: f32;
+override T_MAX: f32;
 
 const BOUNCES = 5u;
 const VERTICES = BOUNCES + 1u;
@@ -1007,21 +997,21 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
     rayQueryInitialize(&rq, acc_struct, RayDesc(0u, 0xFFu, T_MIN, T_MAX, (*ray).origin, (*ray).direction));
     var aabb_normal: vec3<f32>;
     var aabb_tangent: vec3<f32>;
-    while (rayQueryProceed(&rq)) {
+    while rayQueryProceed(&rq) {
         let intersection = rayQueryGetCandidateIntersection(&rq);
-        if (intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE) {
+        if intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE {
             let material = materials[material_idx[intersection.instance_index].materials[intersection.primitive_index][0]];
             let texture_pos = tex_pos[material_idx[intersection.instance_index].materials[intersection.primitive_index][1]];
             let bary = vec3<f32>(intersection.barycentrics, ((1.0 - intersection.barycentrics.x) - intersection.barycentrics.y));
             let tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_base_colour_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_base_colour_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_base_colour_3) * bary.y)));
             let idx_diffuse = unpack_2xu16(material.tex_idx_base_colour_emission).x;
             let ty = unpack4xU8(material.ty_thin_walled_subsurface).x;
-            if (!near_zero(textureSampleLevel(textures[idx_diffuse], sam, tex_coords_float, intersection.t).w) || ty == TRANSPARENT) {
+            if !near_zero(textureSampleLevel(textures[idx_diffuse], sam, tex_coords_float, intersection.t).w) || ty == TRANSPARENT {
                 rayQueryConfirmIntersection(&rq);
             }
-        } else if (intersection.kind == RAY_QUERY_INTERSECTION_AABB) {
+        } else if intersection.kind == RAY_QUERY_INTERSECTION_AABB {
             let aabb_intersection = intersect(intersection);
-            if (aabb_intersection.hit) {
+            if aabb_intersection.hit {
                 aabb_normal = aabb_intersection.normal;
                 aabb_tangent = aabb_intersection.tangent;
                 let t = aabb_intersection.t;
@@ -1032,7 +1022,7 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
     let intersection = rayQueryGetCommittedIntersection(&rq);
 
     var return_intersection = Intersection();
-    if (intersection.kind != RAY_QUERY_INTERSECTION_NONE) {
+    if intersection.kind != RAY_QUERY_INTERSECTION_NONE {
         return_intersection.hit = true;
         return_intersection.t = intersection.t;
         return_intersection.front_face = intersection.front_face;
@@ -1063,22 +1053,22 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
 
         var normal: vec3<f32>;
         var tangent: vec3<f32>;
-        if (intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE) {
+        if intersection.kind == RAY_QUERY_INTERSECTION_TRIANGLE {
             var vertices: array<vec3<f32>, 3>;
-            @if(vertex_return) {
+            @if vertex_return {
                 vertices = getCommittedVertexPositions(&rq);
             }
-            @if(!vertex_return) {
+            @if !vertex_return {
                 vertices = get_vertices(rayQueryGetCommittedIntersection(&rq));
             }
             tangent = correct_tangent(normalize(vertices[0] - vertices[1]));
             normal = normalize(cross(tangent, vertices[0] - vertices[2]));
-        } else if (intersection.kind == RAY_QUERY_INTERSECTION_GENERATED) {
+        } else if intersection.kind == RAY_QUERY_INTERSECTION_GENERATED {
             tangent = aabb_tangent;
             normal = aabb_normal;
         }
 
-        if (dot((*ray).direction, normal) > 0.0) {
+        if dot((*ray).direction, normal) > 0.0 {
             return_intersection.normal = -normal;
         } else {
             return_intersection.normal = normal;
@@ -1093,47 +1083,47 @@ fn ray_hit(ray: ptr<function, Ray>) -> Intersection {
         let sub_surface_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_sub_surface_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_sub_surface_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_sub_surface_3) * bary.y)));
         let metalness_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_metalness_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_metalness_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_metalness_3) * bary.y)));
         let specular_tex_coords_float = fma(unpack2x16float(texture_pos.tex_pos_specular_1), vec2<f32>(bary.z), fma(unpack2x16float(texture_pos.tex_pos_specular_2), vec2<f32>(bary.x), (unpack2x16float(texture_pos.tex_pos_specular_3) * bary.y)));
-        
+
         //return_intersection.color = vec3f(tex_coords_float, 0.0);
         let recolour = textureLoad(tex_recolour, unpack_2xu16(material.tex_pos_recolour), 0).xyz;
         let diffuse_colour = textureSampleLevel(textures[idx_diffuse_emission.x], sam, colour_tex_coords_float, intersection.t).xyz * recolour;
         return_intersection.color_base = diffuse_colour;
-        if (idx_roughness_coat.y != 0xFFFFu) {
+        if idx_roughness_coat.y != 0xFFFFu {
             let coat_colour = textureSampleLevel(textures[idx_roughness_coat.y], sam, coat_tex_coords_float, intersection.t);
             return_intersection.color_coat = vec4(coat_colour.xyz * recolour, coat_colour.w);
         } else {
             return_intersection.color_coat = vec4(1.0, 1.0, 1.0, 0.0);
         }
-        
-        if (idx_subsurface_metalness.x != 0xFFFFu) {
+
+        if idx_subsurface_metalness.x != 0xFFFFu {
             let subsurface_colour = textureSampleLevel(textures[idx_subsurface_metalness.x], sam, sub_surface_tex_coords_float, intersection.t).xyz * recolour;
             return_intersection.color_subsurface = subsurface_colour;
         } else {
             return_intersection.color_subsurface = vec3(0.8, 0.8, 0.8);
         }
-        if (idx_subsurface_metalness.y != 0xFFFFu) {
+        if idx_subsurface_metalness.y != 0xFFFFu {
             let metalness = textureSampleLevel(textures[idx_subsurface_metalness.y], sam, metalness_tex_coords_float, intersection.t).x;
             return_intersection.metalness = metalness;
         } else {
             return_intersection.metalness = 0.0;
         }
         let emission_scale = bitcast<vec2<f32>>(unpack_2xu16(material.emission_scale) << vec2(16));
-        if (idx_diffuse_emission.y != 0xFFFFu) {
+        if idx_diffuse_emission.y != 0xFFFFu {
             return_intersection.emission = textureSampleLevel(textures[idx_diffuse_emission.y], sam, emission_tex_coords_float, intersection.t).xyz * emission_scale.x;
         }
         return_intersection.emission += diffuse_colour * emission_scale.y;
-        if (idx_roughness_coat.x != 0xFFFFu) {
+        if idx_roughness_coat.x != 0xFFFFu {
             let attributes = textureSampleLevel(textures[idx_roughness_coat.x], sam, attributes_tex_coords_float, intersection.t);
             return_intersection.roughness = attributes.xy;
             return_intersection.roughness_coat = attributes.zw;
         }
-        if (idx_specular.x != 0xFFFFu) {
+        if idx_specular.x != 0xFFFFu {
             let specular_colour = textureSampleLevel(textures[idx_specular.x], sam, specular_tex_coords_float, intersection.t);
             return_intersection.color_specular = specular_colour;
         } else {
             return_intersection.color_specular = vec4(1.0);
         }
-        if (idx_specular.y != 0xFFFFu) {
+        if idx_specular.y != 0xFFFFu {
             let specular_rougness = textureSampleLevel(textures[idx_specular.y], sam, specular_tex_coords_float, intersection.t).xy;
             return_intersection.roughness_specular = specular_rougness;
         } else {
@@ -1149,14 +1139,14 @@ fn correct_tangent(tangent: vec3<f32>) -> vec3<f32> {
     let x_largest = abs_dir.x > abs_dir.y && abs_dir.x > abs_dir.z;
     let y_largest = abs_dir.y > abs_dir.x && abs_dir.y > abs_dir.z;
     var reverse_dir: bool;
-    if (x_largest) {
+    if x_largest {
         reverse_dir = dir.x < 0.0;
-    } else if (y_largest) {
+    } else if y_largest {
         reverse_dir = dir.y < 0.0;
     } else {
         reverse_dir = dir.z < 0.0;
     }
-    if (reverse_dir) {
+    if reverse_dir {
         dir = -dir;
     }
     return dir;
@@ -1190,7 +1180,7 @@ fn background(ray: ptr<function, Ray>) -> vec3<f32> {
 
 // from https://math.stackexchange.com/a/1586185
 // also see https://mathworld.wolfram.com/SpherePointPicking.html
-fn rand_on_sphere(own_seed:u32) -> vec3<f32> {
+fn rand_on_sphere(own_seed: u32) -> vec3<f32> {
     let u1 = rand_f32(own_seed);
     let u2 = rand_f32(own_seed + 1u);
     let latitude = acos(fma(2.0, u1, -1.0)) - HALF_PI;
@@ -1198,7 +1188,7 @@ fn rand_on_sphere(own_seed:u32) -> vec3<f32> {
     return to_sphere_from_lat_long(latitude, longitude);
 }
 
-fn rand_on_hemisphere(own_seed:u32) -> vec3<f32> {
+fn rand_on_hemisphere(own_seed: u32) -> vec3<f32> {
     let u1 = rand_f32(own_seed);
     let u2 = rand_f32(own_seed + 1u);
     let latitude = acos(fma(2.0, u1, -1.0)) - HALF_PI;
@@ -1210,22 +1200,22 @@ fn to_sphere_from_lat_long(latitude: f32, longitude: f32) -> vec3<f32> {
     return vec3<f32>(cos(latitude) * cos(longitude), cos(latitude) * sin(longitude), sin(latitude));
 }
 
-fn reflectance(cosine:f32, ref_idx:f32) -> f32 {
+fn reflectance(cosine: f32, ref_idx: f32) -> f32 {
     let r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
-    let r0_squared = r0*r0;
+    let r0_squared = r0 * r0;
     return fma((1.0 - r0_squared), pow((1.0 - cosine), 5.0), r0_squared);
 }
 
 // converts from a orthonormal basis to Carteasian coordinates
-fn from_onb(src:vec3<f32>, up:vec3<f32>, tangent: vec3<f32>) -> vec3<f32> {
+fn from_onb(src: vec3<f32>, up: vec3<f32>, tangent: vec3<f32>) -> vec3<f32> {
     let s = tangent;
     let t = cross(up, s);
     return fma(vec3<f32>(src.x), s, fma(vec3<f32>(src.y), up, (src.z * t)));
 }
 
-fn from_onb_no_tangent(src:vec3<f32>, up:vec3<f32>) -> vec3<f32> {
+fn from_onb_no_tangent(src: vec3<f32>, up: vec3<f32>) -> vec3<f32> {
     var other_angle: vec3<f32>;
-    if (near_zero(up.x)) {
+    if near_zero(up.x) {
         other_angle = vec3(1.0, 0.0, 0.0);
     } else {
         other_angle = vec3(0.0, 1.0, 0.0);
@@ -1234,7 +1224,7 @@ fn from_onb_no_tangent(src:vec3<f32>, up:vec3<f32>) -> vec3<f32> {
     return from_onb(src, up, tangent);
 }
 
-fn onb_cosine_weighted_hemisphere(own_seed:u32) -> vec3<f32> {
+fn onb_cosine_weighted_hemisphere(own_seed: u32) -> vec3<f32> {
     let r1 = rand_f32(own_seed);
     let r2 = rand_f32(own_seed + 1u);
 
@@ -1245,7 +1235,7 @@ fn onb_cosine_weighted_hemisphere(own_seed:u32) -> vec3<f32> {
     return vec3<f32>(x, y, z);
 }
 
-fn cosine_weighted_hemisphere(own_seed:u32, normal: vec3<f32>, tangent:vec3<f32>) -> vec3<f32> {
+fn cosine_weighted_hemisphere(own_seed: u32, normal: vec3<f32>, tangent: vec3<f32>) -> vec3<f32> {
     let hemisphere = onb_cosine_weighted_hemisphere(own_seed);
     return from_onb(hemisphere, normal, tangent);
 }
@@ -1254,8 +1244,7 @@ struct PickedNormal {
     normal: vec3<f32>,
     pdf: f32,
     onb_normal: vec3<f32>,
-    roughness: vec2<f32>
-}
+    roughness: vec2<f32>}
 
 struct GGXReturn {
     normal: vec3<f32>,
@@ -1263,7 +1252,7 @@ struct GGXReturn {
 }
 
 /// `in` is the incoming direction of the ray, it should have a -y value
-fn sample_vndf_ggx(own_seed:u32, in: vec3<f32>, roughness:vec2<f32>) -> GGXReturn {
+fn sample_vndf_ggx(own_seed: u32, in: vec3<f32>, roughness: vec2<f32>) -> GGXReturn {
     let u1 = rand_f32(own_seed);
     let u2 = rand_f32(own_seed + 1u);
 
@@ -1272,7 +1261,7 @@ fn sample_vndf_ggx(own_seed:u32, in: vec3<f32>, roughness:vec2<f32>) -> GGXRetur
     var in_direction = vec3<f32>(view_dir.x * roughness.x, view_dir.y, view_dir.z * roughness.y);
 
     // minimize floating point error
-    if (vec3_near_zero(in_direction)) {
+    if vec3_near_zero(in_direction) {
         in_direction = vec3<f32>(0.0, -1.0, 0.0);
     }
 
@@ -1282,7 +1271,7 @@ fn sample_vndf_ggx(own_seed:u32, in: vec3<f32>, roughness:vec2<f32>) -> GGXRetur
 
     var out_normal = vec3<f32>(wm_std.x * roughness.x, wm_std.y, wm_std.z * roughness.y);
 
-    if (vec3_near_zero(out_normal)) {
+    if vec3_near_zero(out_normal) {
         out_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 
@@ -1293,7 +1282,7 @@ fn sample_vndf_ggx(own_seed:u32, in: vec3<f32>, roughness:vec2<f32>) -> GGXRetur
     return GGXReturn(wm, pdf);
 }
 
-fn sample_ggx_interal(u1: f32, u2:f32, wi:vec3<f32>) -> vec3<f32> {
+fn sample_ggx_interal(u1: f32, u2: f32, wi: vec3<f32>) -> vec3<f32> {
     let phi = TAU * u1;
     // let y = fma((1.0 - u2), (1.0 + wi.y), -wi.y);
     let y = mix(-wi.y, 1.0, u2);
@@ -1342,10 +1331,10 @@ fn ggx_shadowing_masking(in: vec3<f32>, out: vec3<f32>, roughness: vec2<f32>) ->
 }
 
 fn ggx_visible_D(in: vec3<f32>, picked_normal: vec3<f32>, roughness: vec2<f32>) -> f32 {
-    return (ggx_shadowing(in, roughness) * max(0.0, dot(in, picked_normal))*ggx_D(picked_normal, roughness)) / in.y;
+    return (ggx_shadowing(in, roughness) * max(0.0, dot(in, picked_normal)) * ggx_D(picked_normal, roughness)) / in.y;
 }
 
-fn oren_nayer_improved(in: vec3<f32>, seed:u32, roughness:f32, normal:vec3<f32>, tangent:vec3<f32>, color:vec3<f32>) -> DiffuseReturn {
+fn oren_nayer_improved(in: vec3<f32>, seed: u32, roughness: f32, normal: vec3<f32>, tangent: vec3<f32>, color: vec3<f32>) -> DiffuseReturn {
     let incoming = -in;
     let reflected = onb_cosine_weighted_hemisphere(seed);
     let brightness = cosine_weighted_to_oren_nayer_improved(incoming, reflected, roughness, color);

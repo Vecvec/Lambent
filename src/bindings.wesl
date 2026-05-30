@@ -170,13 +170,13 @@ var<storage, read_write> world_markov_chains: array<WorldMarcovChainState>;
 var<storage> old_world_markov_chains: array<WorldMarcovChainState>;
 
 @group(2) @binding(0)
-var sam:sampler;
+var sam: sampler;
 @group(2) @binding(1)
 var textures: binding_array<texture_2d<f32>>;
 @group(2) @binding(2)
 var tex_recolour: texture_2d<f32>;
 
-fn unpack_2xu16(u:u32) -> vec2<u32> {
+fn unpack_2xu16(u: u32) -> vec2<u32> {
     let u1 = u & 0xFFFFu;
     let u2 = (u & 0xFFFF0000u) >> 16u;
     return vec2<u32>(u1, u2);
@@ -196,8 +196,8 @@ struct Reservoir {
     W: f32,                     // 60 4 4
 }
 
-const SMALL_VAL:f32 = 0.0001;
+const SMALL_VAL: f32 = 0.0001;
 
-fn near_zero(float:f32) -> bool {
+fn near_zero(float: f32) -> bool {
     return (float < SMALL_VAL) && (float > -SMALL_VAL);
 }
