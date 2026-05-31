@@ -54,3 +54,27 @@ unsafe impl RayTracingShader for Tangent {
         "tangent debugging shader"
     }
 }
+
+#[repr(u32)]
+pub enum Mode {
+    Weight = 0,
+    WeightRedEmissionGreen = 1,
+    WeightRedBrightnessGreenBlue = 2,
+}
+
+pub struct MarkovWeights<const PIXEL_X: u32, const PIXEL_Y: u32, const MODE: u32>;
+
+unsafe impl<const PIXEL_X: u32, const PIXEL_Y: u32, const MODE: u32> RayTracingShader for MarkovWeights<PIXEL_X, PIXEL_Y, MODE> {
+    fn new() -> Self {
+        Self
+    }
+    fn shader_source_without_intersection_handler(
+        _opts: &dyn low_level::RayTracerOptions,
+    ) -> String {
+        include_wesl!("markov_weights").to_string() + &format!("const GET_POS = vec2<u32>({PIXEL_X}, {PIXEL_Y}); const MODE = {MODE}u;") 
+    }
+    #[cfg(debug_assertions)]
+    fn label() -> &'static str {
+        "markov weight visualisation shader"
+    }
+}

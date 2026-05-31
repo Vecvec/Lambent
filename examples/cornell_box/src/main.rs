@@ -5,8 +5,7 @@ use lambent::camera::Camera;
 use lambent::importance_sampling::{SpatialResampling, TemporalResampling};
 use lambent::textures::TextureLoader;
 use lambent::{
-    dispatch_size, path_tracing, textures, DataBuffers, Descriptor, Material, MaterialType,
-    TexturePositions,
+    DataBuffers, Descriptor, Material, MaterialType, TexturePositions, debug, dispatch_size, path_tracing, textures
 };
 use lambent::{refractive_indices, AdvanceOptions, BufferType};
 use std::cmp::{max, min};
@@ -42,6 +41,8 @@ type RayTracer = lambent::RayTracer<path_tracing::Medium>;
 
 const SIZE: u32 = 320;
 
+type VisualiseRayTracer = lambent::RayTracer<debug::MarkovWeights<{(SIZE * 3) / 4}, {SIZE / 2}, {debug::Mode::WeightRedBrightnessGreenBlue as _}>>;
+
 const SAMPLES: NonZeroU32 = NonZeroU32::new(1).unwrap();
 
 const IS_SAMPLES: usize = 4;
@@ -62,7 +63,8 @@ fn main() {
     let mut change_seed = true;
     let mut importance_sampling = false;
     let mut change_light_brightness = false;
-
+    let mut visualise = false;
+    
     let mut maximum = 256;
     for arg in args {
         if arg == "no-change-seed" {
@@ -77,6 +79,9 @@ fn main() {
         }
         if arg == "change-light-brightness" {
             change_light_brightness = true;
+        }
+        if arg == "visualise" {
+            visualise = true;
         }
     }
 
@@ -325,7 +330,8 @@ fn main() {
     );
 
     let ray_tracer = RayTracer::new(&device);
-
+    let visualise_ray_tracer = VisualiseRayTracer::new(&device);
+    
     let mut glfw = glfw::init(fail_on_errors!()).unwrap();
     // on some platforms this fixes crashes
     glfw.window_hint(WindowHint::ClientApi(ClientApiHint::NoApi));
@@ -365,6 +371,15 @@ fn main() {
         textures::bind_group_from_textures(&device, &queue, &textures, None, None);
 
     let compute_pipeline = ray_tracer.create_pipeline(
+        NonZeroU32::new(1).unwrap(),
+        NonZeroU32::new(6).unwrap(),
+        &lambent::RayTracingOptions {
+            samples,
+            ..Default::default()
+        },
+    );
+
+    let visualise_compute_pipeline = visualise_ray_tracer.create_pipeline(
         NonZeroU32::new(1).unwrap(),
         NonZeroU32::new(6).unwrap(),
         &lambent::RayTracingOptions {
@@ -769,6 +784,10 @@ fn main() {
                     comp_pass.set_pipeline(&temporal_compute_pipeline);
                     // comp_pass.dispatch_workgroups(size.width, size.height, 1);
                     comp_pass.set_pipeline(&spacial_compute_pipeline);
+                    comp_pass.dispatch_workgroups(size.width, size.height, 1);
+                }
+                if visualise {
+                    comp_pass.set_pipeline(&visualise_compute_pipeline);
                     comp_pass.dispatch_workgroups(size.width, size.height, 1);
                 }
             }

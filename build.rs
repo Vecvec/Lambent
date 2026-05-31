@@ -109,4 +109,6 @@ fn main() {
     );
     standard_compiler(false, true)
         .build_artifact(&"package::debug::tangent".parse().unwrap(), "tangent");
+    standard_compiler(false, true)
+        .build_artifact(&"package::debug::markov_wieghts".parse().unwrap(), "markov_weights");
 }

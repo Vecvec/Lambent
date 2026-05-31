@@ -1,5 +1,5 @@
 import package::default_mode::{get_normal, conv_rough, make_diffuse, pick_ref_idx, pick_ref_idx_blend, get_normal_bsdf};
-import package::importance_sampling::shared::{ Sample, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, grid_loc, grid_load, grid_store_markov_chain, strip_NaN_vec3, normalised_to_u32, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, CACHE_TIMEOUT, };
+import package::importance_sampling::shared::{ Sample, rand_f32, rand_f32_ptr, rand_u32, to_onb, copy_sign, rand_xz_vec3_f32, safe_div_vec3, vec3_near_zero, p_hat, update, safe_div, sam_from_res, from_info, u32_to_normalised, get_light_dir, update_marcov_state, grid_loc, grid_load, primary_hasher, secondary_hasher, grid_store_markov_chain, strip_NaN_vec3, normalised_to_u32, HALF_PI, PI, TAU, DIFFUSE, METALLIC, TRANSPARENT, SKY, U32_MAX, CACHE_TIMEOUT, GRID_SIZE, };
 import package::bindings::{
     // Types
     MarcovChainState,
@@ -499,7 +499,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push: bool) -> SampleReturn
                     grid_store_markov_chain(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, state);
                     self_seed++;
                 }
-                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission), self_seed, hit_state.last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
+                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission * hit_state.cached_brdf), self_seed, hit_state.last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
             }
             hit_state.last_normal = intersection.normal;
             hit_state.last_dir = ray.direction;

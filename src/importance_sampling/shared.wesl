@@ -344,7 +344,7 @@ fn update_marcov_state(/* x0: vec3<f32>, */x1: vec3<f32>, x2: vec3<f32>, p_hat: 
     var state = old_state;
     if not_vmf {
         // While the origional paper used this, the newer one instead resets if it couldn't find the light
-        state = MarcovChainState();
+        //state = MarcovChainState();
     }
     let score = p_hat;
     let rand = rand_f32(seed);
