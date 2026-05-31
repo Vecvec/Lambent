@@ -499,7 +499,7 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push: bool) -> SampleReturn
                     grid_store_markov_chain(ray.origin, hit_state.last_normal, hit_state.last_dir, camera_loc, state);
                     self_seed++;
                 }
-                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(intersection.emission * hit_state.cached_brdf), self_seed, hit_state.last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
+                tentative_marcov_chain_state = update_marcov_state(ray.origin, new_pos, length(radiance_out), self_seed, hit_state.last_not_vmf, tentative_marcov_chain_state, select(0.5, 1.0, i == 1), sum_mc, NUM_RESAMPLES);
             }
             hit_state.last_normal = intersection.normal;
             hit_state.last_dir = ray.direction;
