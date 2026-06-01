@@ -238,13 +238,13 @@ fn fill_mc_screen_space_states(own_seed: ptr<function, u32>, sub_size: u32, pix_
     }
 }
 
-const JITTER_SIZE = GRID_SIZE * 1.5;
+const JITTER_SIZE = GRID_SIZE * 5.0;
 //const JITTER_SIZE = 0.0;
 fn fill_mc_world_space_states(own_seed: ptr<function, u32>, pos: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) {
     for (var i = (NUM_RESAMPLES_SCREEN_SPACE + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME + NUM_RESAMPLES_SCREEN_SPACE_LAST_FRAME_CLOSE); i < NUM_NON_PIXEL_RESAMPLES; i++) {
         let force_self = i == 0;
         let rand_candidate = rand_f32(*own_seed) < 0.7 && !force_self;
-        let jitter_mul = select(select(1.0, 0.75, rand_candidate), 0.0, force_self);
+        let jitter_mul = select(select(1.0, 1.0, rand_candidate), 0.0, force_self);
         let jitter = rand_xz_vec3_f32(own_seed) * JITTER_SIZE * jitter_mul;
         let s = grid_load(pos + from_onb_no_tangent(jitter, normal), normal, incoming, camera_loc, rand_candidate);
         other_pixels_marcov_chain_states.state[i] = s;
@@ -546,6 +546,10 @@ fn rt_sample(coord: vec2<u32>, own_seed: u32, should_push: bool) -> SampleReturn
                 hit_state.first_dir = ray.direction;
                 sample.albedo = hit.albedo;
                 sample.emission = hit.emission;
+            }
+
+            if all(color == vec3(0.0)) { 
+                break;
             }
             //sample.color = ray.direction;
             //return sample;
@@ -854,6 +858,10 @@ fn handle_hit(
         (*state).previously_diffuse = true;
         if bounce_idx == 0 {
             (*sample).pdf = final_pdf;
+        }
+
+        if dot((*ray).direction, normal) < 0.0 {
+            hit.albedo = vec3(0.0);
         }
     } else if intersection.ty == TRANSPARENT {
         (*state).cached_pdf = 1.0;

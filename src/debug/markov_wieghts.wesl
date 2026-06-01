@@ -47,6 +47,7 @@ import package::path_tracing::general::{
     fill_mc_world_space_states,
     grid_load_radiance_estimate,
     camera_loc,
+    background,
 };
 
 import package::importance_sampling::shared::{
@@ -54,6 +55,9 @@ import package::importance_sampling::shared::{
     TAU,
     DIFFUSE, METALLIC, TRANSPARENT,
 };
+
+@if(!vertex_return)
+import package::bindings::{get_vertices,};
 
 enable wgpu_ray_query;
 enable wgpu_binding_array;
@@ -104,7 +108,7 @@ fn rt_main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(subgroup_size)
     }
 
     if MODE == 2 {
-        let brightness = length(second_hit.emission + grid_load_radiance_estimate(at(&ray, second_hit.t), second_hit.normal, ray.direction));
+        let brightness = length(select(background(&ray), second_hit.emission + grid_load_radiance_estimate(at(&ray, second_hit.t), second_hit.normal, ray.direction), second_hit.hit));
         textureStore(output, id.xy, vec4<f32>(vec3(weight, brightness, brightness / 50.0), 1.0));
     }
 }
